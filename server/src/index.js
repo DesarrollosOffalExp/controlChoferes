@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import 'dotenv/config';
-import { getPool, sql } from './db.js';
+import { getInweb, sql } from './db.js';
 import { CHOFERES } from './choferes.js';
 
 const app = express();
@@ -27,47 +27,40 @@ app.get('/api/presencia', async (req, res) => {
     return res.status(400).json({ error: 'Parámetro "fecha" requerido con formato YYYY-MM-DD.' });
   }
   try {
-    const pool = await getPool();
+    const pool = await getInweb();
     const request = pool.request();
     request.input('fecha', sql.Date, fecha);
-    CHOFERES.forEach((c, i) => request.input('leg' + i, sql.VarChar(30), c.legajo));
-    const inList = CHOFERES.map((_, i) => '@leg' + i).join(', ');
+    CHOFERES.forEach((c, i) => request.input('dni' + i, sql.VarChar(20), c.dni));
+    const inList = CHOFERES.map((_, i) => '@dni' + i).join(', ');
 
-    // Fichada del día por legajo: primera entrada -> última salida (agregando las
-    // jornadas del día), como la "consulta fichadas" de RRHH.
+    // Fichada del día por DNI: primera marca (entrada) -> última marca (salida).
+    // Fuente: FichadasHik.hik.Fichada (marcas faciales), = la "consulta fichadas" de RRHH.
     const q = `
-      SELECT j.emp_Legajo AS legajo,
-             MAX(j.emp_Agrupamiento) AS area,
-             CONVERT(varchar(19), MIN(TRY_CONVERT(datetime, j.emp_MarcEntrada, 103)), 120) AS entrada,
-             CONVERT(varchar(19), MAX(TRY_CONVERT(datetime, j.emp_MarcSalida, 103)), 120)  AS salida,
-             DATEDIFF(MINUTE,
-                      MIN(TRY_CONVERT(datetime, j.emp_MarcEntrada, 103)),
-                      MAX(TRY_CONVERT(datetime, j.emp_MarcSalida, 103))) AS minutosPresente
-      FROM IntercambioDB062.dbo.DwJornadas j
-      WHERE TRY_CONVERT(date, j.emp_Fecha, 103) = @fecha
-        AND j.emp_Legajo IN (${inList})
-      GROUP BY j.emp_Legajo;`;
+      SELECT f.DNI AS dni,
+             CONVERT(varchar(19), MIN(f.FechaHora), 120) AS entrada,
+             CONVERT(varchar(19), MAX(f.FechaHora), 120) AS salida,
+             DATEDIFF(MINUTE, MIN(f.FechaHora), MAX(f.FechaHora)) AS minutosPresente
+      FROM FichadasHik.hik.Fichada f
+      WHERE f.Fecha = @fecha AND f.DNI IN (${inList})
+      GROUP BY f.DNI;`;
 
     const result = await request.query(q);
-    const clean = (v) => (v && v.trim() !== '' && v.trim() !== '-' ? v.trim() : null);
+    const clean = (v) => (v && String(v).trim() !== '' ? String(v).trim() : null);
 
-    // Mapa legajo (normalizado) -> jornada agregada del día.
-    const byLegajo = {};
-    for (const r of result.recordset) {
-      byLegajo[(r.legajo || '').trim().toUpperCase()] = r;
-    }
+    const byDni = {};
+    for (const r of result.recordset) byDni[String(r.dni).trim()] = r;
 
-    // Siempre devolvemos los 18 choferes; con fichada donde haya.
+    // Siempre los 18 choferes; con fichada donde haya.
     const choferes = CHOFERES.map((c) => {
-      const r = byLegajo[c.legajo.trim().toUpperCase()];
+      const r = byDni[c.dni];
       return {
         dni: c.dni,
         chofer: c.nombre,
-        area: r ? clean(r.area) : null,
+        area: 'Chofer',
         entrada: r ? clean(r.entrada) : null,
         salida: r ? clean(r.salida) : null,
         minutosPresente: r && r.minutosPresente > 0 ? r.minutosPresente : 0,
-        minutosViaje: null,     // pendiente (definición LSGPS/Twins)
+        minutosViaje: null,     // pendiente: geocercas (camión en Offal) del GPS
         minutosSinViaje: null,  // = presente - viaje (pendiente)
       };
     }).sort((a, b) => a.chofer.localeCompare(b.chofer, 'es'));
