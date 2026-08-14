@@ -1,9 +1,12 @@
 import express from 'express';
 import cors from 'cors';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import 'dotenv/config';
 import { getInweb, sql } from './db.js';
 import { CHOFERES } from './choferes.js';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 app.use(cors());
 
@@ -70,6 +73,15 @@ app.get('/api/presencia', async (req, res) => {
     console.error(e);
     res.status(500).json({ error: 'Error consultando la base.', detalle: e.message });
   }
+});
+
+// En producción servimos el frontend compilado (web/dist) desde el mismo Express,
+// así queda un solo deployable (un App Service / un proceso).
+const webDist = path.resolve(__dirname, '../../web/dist');
+app.use(express.static(webDist));
+app.get('*', (req, res) => {
+  if (req.path.startsWith('/api')) return res.status(404).json({ error: 'No encontrado' });
+  res.sendFile(path.join(webDist, 'index.html'));
 });
 
 const port = process.env.PORT || 4610;
