@@ -27,7 +27,7 @@ body {
 .topbar {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 24px;
   padding: 0 24px;
   min-height: 64px;
   background: var(--panel);
@@ -36,15 +36,39 @@ body {
   top: 0;
   z-index: 10;
 }
-.brand { display: flex; align-items: center; gap: 12px; }
-.brand-logo {
+.brand { display: flex; align-items: center; gap: 12px; text-decoration: none; color: inherit; }
+.brand-logo-circle {
   width: 40px; height: 40px; border-radius: 50%;
-  background: var(--accent); color: #fff;
-  display: flex; align-items: center; justify-content: center;
-  font-weight: 700; font-size: 20px;
+  background: #fff; display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; overflow: hidden; padding: 5px;
 }
+.brand-logo-circle img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.brand-txt { display: flex; flex-direction: column; line-height: 1.2; }
 .brand-title { font-weight: 700; font-size: 16px; }
 .brand-sub { color: var(--muted); font-size: 12px; }
+
+/* Lado derecho: Inicio + usuario + salir (barra común de Offal) */
+.userbox { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.navlink {
+  color: var(--muted); text-decoration: none; padding: 8px 12px;
+  border-radius: 8px; font-weight: 600; font-size: 13px;
+}
+.navlink:hover { color: var(--text); background: var(--panel-2); }
+.navlink-ico { display: inline-flex; align-items: center; gap: 7px; }
+.userchip { display: inline-flex; align-items: center; gap: 9px; padding: 4px 6px; }
+.userchip .avatar {
+  width: 32px; height: 32px; border-radius: 50%;
+  background: var(--accent); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 600; flex-shrink: 0;
+}
+.userchip .user-nombre { color: var(--text); font-size: 13px; font-weight: 600; }
+.btn-logout {
+  display: inline-flex; align-items: center; color: var(--text);
+  border: 1px solid rgba(255, 255, 255, .25); padding: 7px 10px;
+  border-radius: 8px; text-decoration: none;
+}
+.btn-logout:hover { background: var(--panel-2); }
 
 .content { max-width: 1400px; margin: 0 auto; padding: 24px; display: flex; flex-direction: column; gap: 18px; }
 

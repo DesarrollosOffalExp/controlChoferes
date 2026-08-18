@@ -20,12 +20,23 @@ function soloHora(s) {
   return m ? `${m[1]}:${m[2]}` : s;
 }
 
+// Portal / índice general de Offal (el logo y el botón Inicio llevan ahí).
+const PORTAL_URL = 'https://offal-hsb3c0gebjgbfmae.eastus-01.azurewebsites.net';
+
+function iniciales(nombre) {
+  const n = (nombre || '').trim();
+  if (!n) return '?';
+  const p = n.split(/[\s,._]+/).filter(Boolean);
+  return (p.length >= 2 ? p[0][0] + p[1][0] : n.slice(0, 2)).toUpperCase();
+}
+
 export default function App() {
   const [fecha, setFecha] = useState(hoyISO());
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [cob, setCob] = useState(null); // cobertura de choferes en LSGPS (Navixy)
+  const [user, setUser] = useState(null); // usuario autenticado (Easy Auth)
 
   async function cargar(f) {
     setLoading(true);
@@ -48,6 +59,19 @@ export default function App() {
       .then((r) => (r.ok ? r.json() : null))
       .then(setCob)
       .catch(() => setCob(null));
+    // Usuario autenticado (Easy Auth / Entra). En local no existe → se ignora.
+    fetch('/.auth/me')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const claims = d?.[0]?.user_claims || [];
+        const name =
+          claims.find((c) => c.typ === 'name')?.val ||
+          claims.find((c) => c.typ?.endsWith('/givenname'))?.val ||
+          d?.[0]?.user_id ||
+          null;
+        setUser(name);
+      })
+      .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -58,12 +82,38 @@ export default function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <div className="brand">
-          <span className="brand-logo">O</span>
-          <div>
-            <div className="brand-title">Offal · Registro de Choferes</div>
-            <div className="brand-sub">Logística — tiempo en planta vs. viaje</div>
-          </div>
+        <a href={PORTAL_URL} className="brand" title="Ir al inicio de Offal">
+          <span className="brand-logo-circle">
+            <img src="/favicon.png" alt="Offal" />
+          </span>
+          <span className="brand-txt">
+            <span className="brand-title">Registro de Choferes</span>
+            <span className="brand-sub">Logística — tiempo en planta vs. viaje</span>
+          </span>
+        </a>
+        <div className="userbox">
+          <a href={PORTAL_URL} className="navlink navlink-ico" title="Ir al inicio de Offal">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+              <polyline points="9 22 9 12 15 12 15 22"></polyline>
+            </svg>
+            <span>Inicio</span>
+          </a>
+          {user && (
+            <>
+              <span className="userchip">
+                <span className="avatar">{iniciales(user)}</span>
+                <span className="user-nombre">{user}</span>
+              </span>
+              <a className="btn-logout" href="/.auth/logout?post_logout_redirect_uri=/" title="Cerrar sesión">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                  <polyline points="16 17 21 12 16 7"></polyline>
+                  <line x1="21" y1="12" x2="9" y2="12"></line>
+                </svg>
+              </a>
+            </>
+          )}
         </div>
       </header>
 
