@@ -25,6 +25,7 @@ export default function App() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [cob, setCob] = useState(null); // cobertura de choferes en LSGPS (Navixy)
 
   async function cargar(f) {
     setLoading(true);
@@ -43,6 +44,10 @@ export default function App() {
 
   useEffect(() => {
     cargar(fecha);
+    fetch('/api/navixy/cobertura')
+      .then((r) => (r.ok ? r.json() : null))
+      .then(setCob)
+      .catch(() => setCob(null));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -94,8 +99,29 @@ export default function App() {
         <div className="aviso">
           <b>En construcción:</b> por ahora se muestra la <b>fichada (presencia)</b> de cada chofer.
           Las columnas <i>Hs en viaje</i> y <i>Hs en Offal sin viaje</i> quedan pendientes hasta
-          definir con LSGPS cómo se atribuye cada viaje a su chofer.
+          completar el setup en LSGPS (ver aviso).
         </div>
+
+        {cob && (cob.conVehiculo < cob.total) && (
+          <div className="aviso lsgps">
+            <b>⚠ Falta completar en LSGPS:</b> {cob.conVehiculo} de {cob.total} choferes con setup
+            completo (empleado + vehículo asignado). Faltan <b>{cob.total - cob.conVehiculo}</b> para
+            poder calcular el <i>tiempo en viaje</i>.
+            <details>
+              <summary>Ver qué falta ({cob.total - cob.conVehiculo})</summary>
+              <ul className="lsgps-lista">
+                {cob.choferes
+                  .filter((c) => !c.enNavixy || !c.trackerId)
+                  .map((c) => (
+                    <li key={c.dni}>
+                      <b>{c.chofer}</b> ({c.dni}) —{' '}
+                      {!c.enNavixy ? 'no está cargado en LSGPS' : 'sin vehículo asignado'}
+                    </li>
+                  ))}
+              </ul>
+            </details>
+          </div>
+        )}
 
         <section className="card">
           {error && <p className="error">Error: {error}</p>}
