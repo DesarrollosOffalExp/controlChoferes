@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import 'dotenv/config';
 import { getInweb, sql } from './db.js';
 import { CHOFERES } from './choferes.js';
+import { employeeList } from './navixy.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -13,6 +14,39 @@ app.use(cors());
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 
 app.get('/api/choferes', (_req, res) => res.json({ choferes: CHOFERES }));
+
+/**
+ * Cobertura en Navixy (LSGPS): para cada chofer nuestro, si está cargado como
+ * empleado y si tiene vehículo asignado. Sirve para que Logística complete el setup
+ * (paso necesario para calcular el "tiempo en viaje").
+ * GET /api/navixy/cobertura
+ */
+app.get('/api/navixy/cobertura', async (_req, res) => {
+  try {
+    const emps = await employeeList();
+    const byDni = {};
+    for (const e of emps) byDni[String(e.driver_license_number || '').trim()] = e;
+    const choferes = CHOFERES.map((c) => {
+      const e = byDni[c.dni];
+      return {
+        dni: c.dni,
+        chofer: c.nombre,
+        enNavixy: !!e,
+        employeeId: e ? e.id : null,
+        trackerId: e ? e.tracker_id : null,
+      };
+    });
+    res.json({
+      total: choferes.length,
+      enNavixy: choferes.filter((x) => x.enNavixy).length,
+      conVehiculo: choferes.filter((x) => x.trackerId).length,
+      choferes,
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Error consultando Navixy.', detalle: e.message });
+  }
+});
 
 /**
  * Presencia (fichada) de los choferes para una fecha.
