@@ -11,26 +11,73 @@ Read-only: el usuario no carga nada, solo consulta.
 - **Frontend:** React + Vite. Carpeta `web/`.
 - Identidad visual: paleta del portal Offal (teal + rojo) + Inter.
 
-## Fuentes de datos (server GPS · 192.168.1.5)
+## Fuentes de datos
 
-- **Presencia / fichada:** `IntercambioDB062.dbo.DwJornadas` (entrada/salida por legajo y día).
-- **Puente Legajo → DNI:** `IntercambioDB062.dbo.DWPresentes` (`Legajo` ↔ `Identificacion`).
-- **Viajes (pendiente):** `apiLGPS.tracker.viajes` / `TwinsDBQuatro171_001.expedicion.*` —
-  falta definir con LSGPS cómo se atribuye cada viaje a su chofer.
+| Dato | Fuente | Detalle |
+|------|--------|---------|
+| **Fichada (presencia)** | `FichadasHik.hik.Fichada` — server INWEB **192.168.1.9** | Marcas faciales (entrada/salida) con `DNI` y `FechaHora`. Es la misma "consulta fichadas" que usa RRHH. |
+| **Choferes** | `server/src/choferes.js` | Lista oficial (18) con `dni`, `legajo`, `nombre`. |
+| **Viaje / geocercas** | API LSGPS (Navixy) `https://napi.lsgps.com.ar` | Eventos `inzone`/`outzone` de la geocerca **OFFAL EXP** por chofer. Ver `docs/navixy-integracion.md`. |
+
+---
+
+## Cómo se calcula cada valor
+
+Todo se cruza por **DNI** (la fichada, los choferes y el conductor del GPS usan el mismo DNI).
+
+### Hs presente (fichada)
+Por cada chofer y día:
+```
+Hs presente = última marca facial del día − primera marca facial del día
+```
+- Fuente: `FichadasHik.hik.Fichada`, filtrando por el `DNI` del chofer y la `Fecha`.
+  `entrada = MIN(FechaHora)`, `salida = MAX(FechaHora)`, y la diferencia en minutos.
+- Coincide **exacto** con la planilla "consulta fichadas" de RRHH.
+
+> **⚠️ Por qué a veces da 0 o pocos minutos:** si el chofer tiene **una sola marca** ese día
+> (o dos muy seguidas), la diferencia da 0 / unos minutos. No es un error de cálculo: los
+> **choferes entran y salen en camión** y muchas veces fichan al llegar pero **no fichan la
+> salida** (se van por el portón, no por el molinete facial). Por eso la fichada, sola, es
+> imprecisa para los choferes — y por eso se cruza con el GPS (el viaje). Ej. real 14/08:
+> un chofer con 1 marca → 0 min; con 2+ marcas → 8–17 hs.
+
+### Hs en viaje  *(pendiente de completar setup en LSGPS)*
+Tiempo que el **camión del chofer estuvo fuera de la geocerca de Offal**:
+```
+Hs en viaje = Σ (salida de OFFAL EXP → siguiente entrada a OFFAL EXP)
+```
+- Fuente: API Navixy, `history/tracker/list` con eventos `inzone`/`outzone` de la zona
+  "OFFAL EXP". Cada evento trae el `employee_id` (chofer) → se mapea a DNI.
+- El camión de cada chofer sale de `employee.tracker_id` (asignación en Navixy).
+
+### Hs en Offal sin viaje
+```
+Hs en Offal sin viaje = Hs presente (fichada) − Hs en viaje
+```
+Es el "tiempo muerto": el chofer está fichado en la planta pero no manejando.
+
+### Cobertura LSGPS (aviso del tablero)
+Para cada chofer, si está cargado como **empleado** en Navixy (`employee/list`, cruzando por
+`driver_license_number = DNI`) y si tiene **vehículo asignado** (`tracker_id`). Sirve para que
+Logística complete el setup — sin eso no se puede calcular el tiempo en viaje.
+
+---
 
 ## Estado
 
-- ✅ **Presencia por chofer y día** funcionando (columna *Hs presente*).
-- ⏳ **Hs en viaje** y **Hs en Offal sin viaje**: pendientes hasta cerrar el enganche viaje↔chofer.
-- La lista de choferes está en `server/src/choferes.js` (sembrada con los de LSGPS;
-  reemplazar por la lista oficial de RRHH/Logística cuando llegue).
+- ✅ **Hs presente (fichada)** — funcionando, coincide con RRHH.
+- ✅ **Cliente Navixy + aviso de cobertura** — funcionando (`/api/navixy/cobertura`).
+- ⏳ **Hs en viaje** y **Hs en Offal sin viaje** — el mecanismo está listo; falta que Logística
+  complete en Navixy los 18 choferes + vehículos + la regla de geocerca de OFFAL EXP.
+- ⏳ **Deploy** — lee de la LAN interna (192.168.1.5/.9) → Azure App Service común no llega;
+  usar Azure + Hybrid Connections u hosting on-prem.
 
 ## Correr en local
 
 1. Backend:
    ```bash
    cd server
-   cp .env.example .env      # completar credenciales SQL del 192.168.1.5
+   cp .env.example .env      # completar credenciales SQL + API Navixy
    npm install
    npm run dev               # http://localhost:4610
    ```
@@ -44,12 +91,6 @@ Read-only: el usuario no carga nada, solo consulta.
 ## Endpoints
 
 - `GET /api/health`
-- `GET /api/choferes` — DNIs configurados.
-- `GET /api/presencia?fecha=YYYY-MM-DD` — presencia (fichada) de los choferes ese día.
-
-## Pendiente para cerrar el cálculo
-
-Definir con LSGPS/Twins: **¿cómo se sabe qué chofer hizo cada viaje y su duración?**
-(¿`tracker.viajes` + algún join, o el modelo de expedición de Twins
-`ViajesInterfaz` / `RegistroCamiones_Choferes` / `Persona_ID`? ¿`Persona_ID` → DNI?).
-Con eso se completa `minutosViaje` y `minutosSinViaje` en `server/src/index.js`.
+- `GET /api/choferes` — lista de choferes configurados.
+- `GET /api/presencia?fecha=YYYY-MM-DD` — fichada de los choferes ese día.
+- `GET /api/navixy/cobertura` — qué choferes faltan cargar/asignar en LSGPS.
