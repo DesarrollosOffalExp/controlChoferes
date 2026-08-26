@@ -84,12 +84,10 @@ export default function App() {
       <header className="topbar">
         <a href={PORTAL_URL} className="brand" title="Ir al inicio de Offal">
           <span className="brand-logo-circle">
-            <img src="/favicon.png" alt="Offal" />
+            <img src="/logo.png" alt="Offal" />
           </span>
-          <span className="brand-txt">
-            <span className="brand-title">Registro de Choferes</span>
-            <span className="brand-sub">Logística — tiempo en planta vs. viaje</span>
-          </span>
+          <img className="brand-wordmark" src="/logo-offal.svg" alt="Offal Exp S.A." />
+          <span className="brand-sub">Registro de Choferes</span>
         </a>
         <div className="userbox">
           <a href={PORTAL_URL} className="navlink navlink-ico" title="Ir al inicio de Offal">
