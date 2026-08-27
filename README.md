@@ -108,8 +108,10 @@ debe existir como vehículo/tracker en LSGPS para poder calcular el viaje.
   y `HOJARUTA_SERVER/NAME/USER/PASSWORD` (+ `HOJARUTA_ENCRYPT=true`).
   ⚠️ Es `INWEB_PASSWORD` (no `INWEB_PASS`, como en el `.dbcred` local).
 - **Hoja de Ruta (Azure SQL):** la base `controletiquetas` es **Azure directo** (NO hybrid
-  connection). Correr `docs/hoja-ruta-sql.sql` (crea `transporte.HojasRuta` + el usuario
-  `app_hojaruta` con permiso SELECT/INSERT/UPDATE en el esquema `transporte`).
+  connection). Correr `docs/hoja-ruta-sql.sql` (crea `transporte.HojasRuta`). Para la conexión
+  se **reusa el mismo login** que el portal ya usa para `controletiquetas` → `HOJARUTA_USER/
+  PASSWORD` = ese login. Si el login tiene `db_datawriter`/`db_owner`, ya puede escribir; si no,
+  darle `GRANT ... ON SCHEMA::transporte` (ver el script).
 
 ## Correr en local
 

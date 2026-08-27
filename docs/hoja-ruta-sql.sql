@@ -39,17 +39,29 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_HojasRuta_Patente')
 GO
 
 /* ----------------------------------------------------------------------------
-   3) Usuario de la app con permisos SOLO sobre el esquema transporte.
-   En Azure SQL usamos un "contained user" con contraseña (no login de servidor).
-   Reemplazá la contraseña por una fuerte y ponela igual en la App Setting
-   HOJARUTA_PASSWORD del App Service.
+   3) Permisos — REUSANDO el login que ya usás para controletiquetas
+      (el mismo que el portal / otro módulo). NO se crea usuario nuevo.
+
+   3.a) Ver qué usuarios/roles ya existen en la base (para elegir cuál reusás):
    ---------------------------------------------------------------------------- */
-IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = 'app_hojaruta')
-    CREATE USER app_hojaruta WITH PASSWORD = 'CAMBIAR-por-una-contraseña-fuerte-1';
+SELECT dp.name AS usuario, dp.type_desc,
+       STRING_AGG(r.name, ', ') AS roles
+FROM sys.database_principals dp
+LEFT JOIN sys.database_role_members rm ON rm.member_principal_id = dp.principal_id
+LEFT JOIN sys.database_principals r     ON r.principal_id = rm.role_principal_id
+WHERE dp.type IN ('S','U','E','X') AND dp.name NOT LIKE 'db[_]%' AND dp.name <> 'guest'
+GROUP BY dp.name, dp.type_desc
+ORDER BY dp.name;
 GO
 
-GRANT SELECT, INSERT, UPDATE ON SCHEMA::transporte TO app_hojaruta;
-GO
+/* ----------------------------------------------------------------------------
+   3.b) SOLO si el login que reusás NO tiene db_datawriter/db_owner:
+        darle permiso puntual sobre el esquema transporte.
+        Reemplazá <TU_USUARIO> por el nombre que viste arriba y descomentá.
+        (Si ya tiene db_datawriter u db_owner, SALTEAR este paso: ya puede escribir.)
+   ---------------------------------------------------------------------------- */
+-- GRANT SELECT, INSERT, UPDATE ON SCHEMA::transporte TO [<TU_USUARIO>];
+-- GO
 
 -- Comprobación
 SELECT TOP 5 * FROM transporte.HojasRuta ORDER BY Id DESC;
