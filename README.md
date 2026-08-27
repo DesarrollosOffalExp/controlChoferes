@@ -1,9 +1,16 @@
 # Registro de Choferes (Offal)
 
-Módulo para **Logística**: tablero que muestra cuánto tiempo están los choferes en la
-planta **sin viaje** = **horas fichadas (presencia) − horas en viaje (LSGPS)**.
+Módulo para **Logística** con dos vistas (slider en la barra superior):
 
-Read-only: el usuario no carga nada, solo consulta.
+- **Reportes** — tablero: cuánto tiempo están los choferes en la planta **sin viaje** =
+  **horas fichadas (presencia) − horas en viaje (LSGPS)**.
+- **Hoja de Ruta** — formulario que reemplaza el MS Form *"Hoja de Ruta - Transporte"*.
+  Ahí se carga, por viaje, la **patente asignada al chofer** (entre otros datos). Esa patente
+  es la que después se cruza con LSGPS para calcular el tiempo en planta.
+
+> **Idea clave:** la Hoja de Ruta aporta el vínculo **chofer ↔ patente ↔ fecha** (cargado a
+> mano). Con eso, de LSGPS solo tomamos la **patente** — ya **no** hace falta que Navixy tenga
+> los choferes cargados como empleados, solo los vehículos/patentes.
 
 ## Stack
 
@@ -17,7 +24,8 @@ Read-only: el usuario no carga nada, solo consulta.
 |------|--------|---------|
 | **Fichada (presencia)** | `FichadasHik.hik.Fichada` — server INWEB **192.168.1.9** | Marcas faciales (entrada/salida) con `DNI` y `FechaHora`. Es la misma "consulta fichadas" que usa RRHH. |
 | **Choferes** | `server/src/choferes.js` | Lista oficial (18) con `dni`, `legajo`, `nombre`. |
-| **Viaje / geocercas** | API LSGPS (Navixy) `https://napi.lsgps.com.ar` | Eventos `inzone`/`outzone` de la geocerca **OFFAL EXP** por chofer. Ver `docs/navixy-integracion.md`. |
+| **Hoja de Ruta** | `transporte.HojasRuta` — Azure SQL **controletiquetas** | La cargan en la app (pestaña Hoja de Ruta). Aporta la **patente** por chofer y fecha. Ver `docs/hoja-ruta-sql.sql`. |
+| **Viaje / geocercas** | API LSGPS (Navixy) `https://napi.lsgps.com.ar` | Eventos `inzone`/`outzone` de la geocerca **OFFAL EXP**, resueltos por **patente** (tracker). Ver `docs/navixy-integracion.md`. |
 
 ---
 
@@ -49,36 +57,41 @@ Hs presente = última marca facial del día − primera marca facial del día
 > imprecisa para los choferes — y por eso se cruza con el GPS (el viaje). Ej. real 14/08:
 > un chofer con 1 marca → 0 min; con 2+ marcas → 8–17 hs.
 
-### Hs en viaje  *(pendiente de completar setup en LSGPS)*
-Tiempo que el **camión del chofer estuvo fuera de la geocerca de Offal**:
+### Hs en viaje  *(por patente de la Hoja de Ruta)*
+Tiempo que el **camión (patente) estuvo fuera de la geocerca de Offal** ese día:
 ```
 Hs en viaje = Σ (salida de OFFAL EXP → siguiente entrada a OFFAL EXP)
 ```
-- Fuente: API Navixy, `history/tracker/list` con eventos `inzone`/`outzone` de la zona
-  "OFFAL EXP". Cada evento trae el `employee_id` (chofer) → se mapea a DNI.
-- El camión de cada chofer sale de `employee.tracker_id` (asignación en Navixy).
+- **Patente:** sale de la Hoja de Ruta (`transporte.HojasRuta`) del chofer para esa fecha.
+- **Tracker:** `tracker/list` → se busca el vehículo cuyo `label` coincide con la patente
+  (comparación normalizada, solo alfanumérico).
+- **Eventos:** `history/tracker/list` con `inzone`/`outzone` de la zona "OFFAL EXP" de ESE
+  tracker. Una máquina de estados suma los tramos fuera de la geocerca (código en
+  `server/src/navixy.js → viajePorPatente`). Si la fecha es hoy, corta en la hora actual.
+- Si el chofer **no tiene hoja** ese día, o la **patente no existe** en LSGPS, la columna
+  queda vacía (no se inventa un valor).
 
 ### Hs en Offal sin viaje
 ```
-Hs en Offal sin viaje = Hs presente (fichada) − Hs en viaje
+Hs en Offal sin viaje = Hs presente (fichada) − Hs en viaje   (nunca negativo)
 ```
 Es el "tiempo muerto": el chofer está fichado en la planta pero no manejando.
 
 ### Cobertura LSGPS (aviso del tablero)
-Para cada chofer, si está cargado como **empleado** en Navixy (`employee/list`, cruzando por
-`driver_license_number = DNI`) y si tiene **vehículo asignado** (`tracker_id`). Sirve para que
-Logística complete el setup — sin eso no se puede calcular el tiempo en viaje.
+Cuántos choferes tienen **vehículo asignado** en Navixy (`employee/list` + `tracker_id`). Con el
+modelo por patente ya **no es imprescindible** cargar al chofer en Navixy, pero la **patente sí**
+debe existir como vehículo/tracker en LSGPS para poder calcular el viaje.
 
 ---
 
 ## Estado
 
 - ✅ **Hs presente (fichada)** — funcionando, coincide con RRHH.
-- ✅ **Cliente Navixy + aviso de cobertura** — funcionando (`/api/navixy/cobertura`).
-- ⏳ **Hs en viaje** y **Hs en Offal sin viaje** — el mecanismo está listo; falta que Logística
-  complete en Navixy los 18 choferes + vehículos + la regla de geocerca de OFFAL EXP.
-- ⏳ **Deploy** — lee de la LAN interna (192.168.1.5/.9) → Azure App Service común no llega;
-  usar Azure + Hybrid Connections u hosting on-prem.
+- ✅ **Hoja de Ruta** — formulario + tabla `transporte.HojasRuta` (guardar/listar).
+- ✅ **Hs en viaje / sin viaje por patente** — mecanismo listo; se calcula donde haya hoja de
+  ruta **y** la patente exista como tracker en LSGPS.
+- ⚙️ **Setup pendiente:** correr `docs/hoja-ruta-sql.sql` en la base `controletiquetas` y cargar
+  las App Settings `HOJARUTA_*`. Que las **patentes** de los tractores estén como vehículos en LSGPS.
 
 ## Infraestructura (producción)
 
@@ -91,8 +104,12 @@ Logística complete el setup — sin eso no se puede calcular el tiempo en viaje
   **hostname exacto** de la hybrid connection (no la IP `192.168.1.9`), si no Azure no lo enruta.
 - **Login SQL:** dedicado de solo lectura **`app_choferes`** con `SELECT` sobre
   `FichadasHik.hik.Fichada` (no se usa `sa`, que está restringido para conexiones remotas).
-- **Variables (App Settings):** `INWEB_SERVER/NAME/USER/PASSWORD`, `GPS_*`, `NAVIXY_BASE/USER/PASS`.
+- **Variables (App Settings):** `INWEB_SERVER/NAME/USER/PASSWORD`, `GPS_*`, `NAVIXY_BASE/USER/PASS`
+  y `HOJARUTA_SERVER/NAME/USER/PASSWORD` (+ `HOJARUTA_ENCRYPT=true`).
   ⚠️ Es `INWEB_PASSWORD` (no `INWEB_PASS`, como en el `.dbcred` local).
+- **Hoja de Ruta (Azure SQL):** la base `controletiquetas` es **Azure directo** (NO hybrid
+  connection). Correr `docs/hoja-ruta-sql.sql` (crea `transporte.HojasRuta` + el usuario
+  `app_hojaruta` con permiso SELECT/INSERT/UPDATE en el esquema `transporte`).
 
 ## Correr en local
 
@@ -114,5 +131,8 @@ Logística complete el setup — sin eso no se puede calcular el tiempo en viaje
 
 - `GET /api/health`
 - `GET /api/choferes` — lista de choferes configurados.
-- `GET /api/presencia?fecha=YYYY-MM-DD` — fichada de los choferes ese día.
+- `GET /api/presencia?fecha=YYYY-MM-DD` — fichada + tiempo en viaje/sin viaje ese día.
 - `GET /api/navixy/cobertura` — qué choferes faltan cargar/asignar en LSGPS.
+- `POST /api/hoja-ruta` — guarda una hoja de ruta (body JSON).
+- `GET /api/hoja-ruta?desde=&hasta=` — lista hojas de ruta por rango.
+- `POST /api/hoja-ruta/:id/anular` — anula (soft-delete) una hoja.

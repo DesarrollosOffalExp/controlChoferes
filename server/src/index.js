@@ -5,15 +5,56 @@ import { fileURLToPath } from 'node:url';
 import 'dotenv/config';
 import { getInweb, sql } from './db.js';
 import { CHOFERES } from './choferes.js';
-import { employeeList } from './navixy.js';
+import { employeeList, trackerList, viajePorPatente } from './navixy.js';
+import { crearHoja, listarHojas, hojasPorFecha, anularHoja } from './hojaruta.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 app.use(cors());
+app.use(express.json());
+
+// Usuario autenticado (Easy Auth inyecta este header en producción; en local es null).
+const usuarioDe = (req) =>
+  req.header('x-ms-client-principal-name') || req.header('x-ms-client-principal-id') || null;
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 
 app.get('/api/choferes', (_req, res) => res.json({ choferes: CHOFERES }));
+
+// ---- Hoja de Ruta (Transporte) --------------------------------------------
+
+/** POST /api/hoja-ruta — guarda una hoja de ruta. */
+app.post('/api/hoja-ruta', async (req, res) => {
+  try {
+    const out = await crearHoja(req.body || {}, usuarioDe(req));
+    res.status(201).json(out);
+  } catch (e) {
+    console.error(e);
+    const clienteError = /inválida|Falta/.test(e.message);
+    res.status(clienteError ? 400 : 500).json({ error: e.message });
+  }
+});
+
+/** GET /api/hoja-ruta?desde=&hasta= — lista hojas de ruta. */
+app.get('/api/hoja-ruta', async (req, res) => {
+  try {
+    const hojas = await listarHojas({ desde: req.query.desde, hasta: req.query.hasta });
+    res.json({ total: hojas.length, hojas });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Error consultando hojas de ruta.', detalle: e.message });
+  }
+});
+
+/** POST /api/hoja-ruta/:id/anular — soft-delete. */
+app.post('/api/hoja-ruta/:id/anular', async (req, res) => {
+  try {
+    res.json(await anularHoja(req.params.id));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Error anulando la hoja.', detalle: e.message });
+  }
+});
 
 /**
  * Cobertura en Navixy (LSGPS): para cada chofer nuestro, si está cargado como
@@ -49,14 +90,16 @@ app.get('/api/navixy/cobertura', async (_req, res) => {
 });
 
 /**
- * Presencia (fichada) de los choferes para una fecha.
+ * Presencia + tiempo en planta de los choferes para una fecha.
  * GET /api/presencia?fecha=YYYY-MM-DD
  *
- * Fuente: IntercambioDB062.dbo.DwJornadas (entrada/salida por legajo y día),
- * cruzada con DWPresentes (Legajo -> Identificacion = DNI) para filtrar choferes.
+ * - Fichada (presencia): FichadasHik.hik.Fichada (primera→última marca facial por DNI).
+ * - Tiempo en viaje: Hoja de Ruta (patente asignada al chofer ese día) → LSGPS
+ *   (eventos de geocerca OFFAL EXP de ESA patente) → minutos fuera de la planta.
+ * - Tiempo en Offal sin viaje = presente − viaje.
  *
- * NOTA: "minutosViaje" y "minutosSinViaje" quedan pendientes hasta definir
- * con LSGPS/Twins cómo se atribuye un viaje (con su duración) a un chofer.
+ * El cruce con la Hoja de Ruta + LSGPS es best-effort: si falta la hoja o la
+ * patente no está en LSGPS, minutosViaje/minutosSinViaje quedan en null.
  */
 app.get('/api/presencia', async (req, res) => {
   const fecha = String(req.query.fecha || '');
@@ -87,18 +130,61 @@ app.get('/api/presencia', async (req, res) => {
     const byDni = {};
     for (const r of result.recordset) byDni[String(r.dni).trim()] = r;
 
-    // Siempre los 18 choferes; con fichada donde haya.
+    // Hoja de Ruta del día: aporta la patente asignada a cada chofer.
+    // Con esa patente cruzamos LSGPS para el tiempo en viaje (sin depender de
+    // que Navixy tenga los choferes cargados). Todo el enriquecimiento va en un
+    // try/catch: si falla (tabla/LSGPS), la fichada se devuelve igual.
+    const patentesPorDni = {}; // dni -> Set(patentes)
+    const viajePorDni = {};    // dni -> minutos en viaje (o null)
+    try {
+      const hojas = await hojasPorFecha(fecha);
+      for (const h of hojas) {
+        const dni = String(h.choferDni || '').trim();
+        if (!dni || !h.patenteTractor) continue;
+        (patentesPorDni[dni] ||= new Set()).add(String(h.patenteTractor).trim());
+      }
+      if (Object.keys(patentesPorDni).length) {
+        // Si la fecha es hoy, cortamos el cálculo en la hora actual; si no, fin del día.
+        const ahora = new Date();
+        const esHoy = fecha === ahora.toISOString().slice(0, 10);
+        const finMin = esHoy ? ahora.getHours() * 60 + ahora.getMinutes() : 1440;
+
+        const trackers = await trackerList(); // cache una vez para todas las patentes
+        const cachePat = {}; // patente -> minutosViaje
+        for (const [dni, pats] of Object.entries(patentesPorDni)) {
+          let suma = 0;
+          let algunoResuelto = false;
+          for (const pat of pats) {
+            if (cachePat[pat] === undefined) {
+              const v = await viajePorPatente(pat, fecha, finMin, trackers);
+              cachePat[pat] = v.minutosViaje; // number o null
+            }
+            if (cachePat[pat] != null) { suma += cachePat[pat]; algunoResuelto = true; }
+          }
+          viajePorDni[dni] = algunoResuelto ? suma : null;
+        }
+      }
+    } catch (e) {
+      console.error('Enriquecimiento LSGPS/hoja de ruta falló (se devuelve solo fichada):', e.message);
+    }
+
+    // Siempre los 18 choferes; con fichada donde haya, y viaje donde la hoja + LSGPS lo permitan.
     const choferes = CHOFERES.map((c) => {
       const r = byDni[c.dni];
+      const presente = r && r.minutosPresente > 0 ? r.minutosPresente : 0;
+      const patentes = patentesPorDni[c.dni] ? [...patentesPorDni[c.dni]] : [];
+      const minutosViaje = viajePorDni[c.dni] ?? null;
       return {
         dni: c.dni,
         chofer: c.nombre,
         area: 'Chofer',
+        patente: patentes.join(', ') || null,
         entrada: r ? clean(r.entrada) : null,
         salida: r ? clean(r.salida) : null,
-        minutosPresente: r && r.minutosPresente > 0 ? r.minutosPresente : 0,
-        minutosViaje: null,     // pendiente: geocercas (camión en Offal) del GPS
-        minutosSinViaje: null,  // = presente - viaje (pendiente)
+        minutosPresente: presente,
+        minutosViaje,
+        // Tiempo en planta sin manejar = presente − viaje (nunca negativo).
+        minutosSinViaje: minutosViaje == null ? null : Math.max(0, presente - minutosViaje),
       };
     }).sort((a, b) => a.chofer.localeCompare(b.chofer, 'es'));
 

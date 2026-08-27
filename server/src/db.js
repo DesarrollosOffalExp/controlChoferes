@@ -32,4 +32,7 @@ function getPool(prefix, defaultDb) {
 
 export const getInweb = () => getPool('INWEB', 'FichadasHik');
 export const getGps = () => getPool('GPS', 'IntercambioDB062');
+// Azure SQL compartida (controletiquetas): acá SÍ escribimos la Hoja de Ruta
+// (esquema transporte). No pasa por hybrid connection: es Azure directo.
+export const getHojaRuta = () => getPool('HOJARUTA', 'controletiquetas');
 export { sql };
