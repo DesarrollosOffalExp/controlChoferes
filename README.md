@@ -33,6 +33,14 @@ Hs presente = última marca facial del día − primera marca facial del día
 - Fuente: `FichadasHik.hik.Fichada`, filtrando por el `DNI` del chofer y la `Fecha`.
   `entrada = MIN(FechaHora)`, `salida = MAX(FechaHora)`, y la diferencia en minutos.
 - Coincide **exacto** con la planilla "consulta fichadas" de RRHH.
+- **Endpoint:** `GET /api/presencia?fecha=YYYY-MM-DD`. Consulta:
+  ```sql
+  SELECT DNI, MIN(FechaHora) AS entrada, MAX(FechaHora) AS salida,
+         DATEDIFF(MINUTE, MIN(FechaHora), MAX(FechaHora)) AS minutosPresente
+  FROM FichadasHik.hik.Fichada
+  WHERE Fecha = @fecha AND DNI IN (<18 DNIs de choferes>)
+  GROUP BY DNI;
+  ```
 
 > **⚠️ Por qué a veces da 0 o pocos minutos:** si el chofer tiene **una sola marca** ese día
 > (o dos muy seguidas), la diferencia da 0 / unos minutos. No es un error de cálculo: los
@@ -71,6 +79,20 @@ Logística complete el setup — sin eso no se puede calcular el tiempo en viaje
   complete en Navixy los 18 choferes + vehículos + la regla de geocerca de OFFAL EXP.
 - ⏳ **Deploy** — lee de la LAN interna (192.168.1.5/.9) → Azure App Service común no llega;
   usar Azure + Hybrid Connections u hosting on-prem.
+
+## Infraestructura (producción)
+
+- **Deploy:** Azure App Service `logistica` (`https://logistica.offalexpsa.ar`), Node/Linux, por
+  GitHub Actions desde `main`. El backend sirve el frontend compilado (`web/dist`) → un solo proceso.
+- **Login:** Entra (Easy Auth) a nivel App Service. El portal muestra el tile según
+  `acceso.Permisos.App = 'choferes'`.
+- **Red interna (Hybrid Connections):** el App Service llega a los SQL on-prem por túnel —
+  INWEB (`tchala.offalexp:1433`) y GPS (`srvtwins.offalexp:1433`). ⚠️ `INWEB_SERVER` debe ser el
+  **hostname exacto** de la hybrid connection (no la IP `192.168.1.9`), si no Azure no lo enruta.
+- **Login SQL:** dedicado de solo lectura **`app_choferes`** con `SELECT` sobre
+  `FichadasHik.hik.Fichada` (no se usa `sa`, que está restringido para conexiones remotas).
+- **Variables (App Settings):** `INWEB_SERVER/NAME/USER/PASSWORD`, `GPS_*`, `NAVIXY_BASE/USER/PASS`.
+  ⚠️ Es `INWEB_PASSWORD` (no `INWEB_PASS`, como en el `.dbcred` local).
 
 ## Correr en local
 
