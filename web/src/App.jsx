@@ -35,29 +35,27 @@ export default function App() {
           </span>
           <span className="brand-txt">
             <span className="brand-title">Registro de Choferes</span>
-            <span className="brand-sub">Logística — hoja de ruta y tiempo en planta</span>
+            <span className="brand-sub">Logística — planta, viajes y hoja de ruta</span>
           </span>
         </a>
 
-        {/* Slider entre las dos vistas */}
-        <div className="viewswitch" role="tablist" aria-label="Vistas">
-          <span className={'vs-thumb ' + vista} aria-hidden="true" />
+        {/* Slider: alterna Reportes / Hoja de Ruta */}
+        <div className="switch" role="tablist" aria-label="Vista">
           <button
-            role="tab"
-            aria-selected={vista === 'reportes'}
-            className={'vs-btn' + (vista === 'reportes' ? ' activo' : '')}
+            className={'switch-op' + (vista === 'reportes' ? ' activo' : '')}
+            role="tab" aria-selected={vista === 'reportes'}
             onClick={() => setVista('reportes')}
           >
             Reportes
           </button>
           <button
-            role="tab"
-            aria-selected={vista === 'hojaruta'}
-            className={'vs-btn' + (vista === 'hojaruta' ? ' activo' : '')}
+            className={'switch-op' + (vista === 'hojaruta' ? ' activo' : '')}
+            role="tab" aria-selected={vista === 'hojaruta'}
             onClick={() => setVista('hojaruta')}
           >
             Hoja de Ruta
           </button>
+          <span className={'switch-thumb ' + vista} aria-hidden="true" />
         </div>
 
         <div className="userbox">
