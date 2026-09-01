@@ -7,7 +7,7 @@ import { getInweb, sql } from './db.js';
 import { CHOFERES } from './choferes.js';
 import { employeeList, trackerList, viajePorPatente } from './navixy.js';
 import { crearHoja, listarHojas, hojasPorFecha, anularHoja } from './hojaruta.js';
-import { enPlantaDia, ahoraArg } from './fichada.js';
+import { jornadaDia, ahoraArg } from './fichada.js';
 import { listarPatentes, listarFrigorificos } from './lavados.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -123,10 +123,12 @@ app.get('/api/navixy/cobertura', async (_req, res) => {
  *   (Dispositivo 'Facial Entrada' / 'Facial Salida') tratando el cruce de medianoche.
  *   NO se usa MIN/MAX del día: los choferes salen de viaje y vuelven, así que la
  *   primera/última marca del día calendario invierte entrada/salida. Ver fichada.js.
- * - Hs FUERA (molinete): resto del día fuera del perímetro (≈ viaje según fichada).
- * - Hs EN VIAJE (GPS): Hoja de Ruta (patente del chofer ese día) → LSGPS (geocerca
- *   OFFAL EXP de ESA patente). Sirve para validar/contrastar con la fichada.
+ * - Entrada = primera Facial Entrada del día; Salida = última Facial Salida de la
+ *   jornada (puede caer al día siguiente en el turno noche → salida.otroDia=true).
+ *   La jornada se imputa al día que ENTRA. Ver fichada.js (jornadaDia).
+ * - Hs EN VIAJE (GPS) + destino: Hoja de Ruta (patente del chofer) → LSGPS.
  *
+ * NOTA: "Hs en planta / Hs fuera" quedan sacadas hasta validar Entrada/Salida.
  * El cruce con LSGPS es best-effort: si falta la hoja o la patente no está en LSGPS,
  * minutosViaje queda en null (la fichada se devuelve igual).
  */
@@ -136,16 +138,16 @@ app.get('/api/presencia', async (req, res) => {
     return res.status(400).json({ error: 'Parámetro "fecha" requerido con formato YYYY-MM-DD.' });
   }
   try {
-    // Ventana: la fecha + 3 días previos, para conocer el estado (dentro/fuera) en 00:00.
-    const desde = new Date(Date.parse(`${fecha}T00:00:00Z`) - 3 * 86400000)
+    // Ventana: la fecha + el día SIGUIENTE (la salida del turno noche cae al otro día).
+    const hasta = new Date(Date.parse(`${fecha}T00:00:00Z`) + 1 * 86400000)
       .toISOString().slice(0, 10);
     const arg = ahoraArg();
-    const finMin = fecha === arg.fecha ? arg.min : 1440; // si es hoy, cortar en la hora actual
+    const finMin = fecha === arg.fecha ? arg.min : 1440; // si es hoy, cortar en la hora actual (para el viaje GPS)
 
     const pool = await getInweb();
     const request = pool.request();
-    request.input('desde', sql.Date, desde);
     request.input('fecha', sql.Date, fecha);
+    request.input('hasta', sql.Date, hasta);
     CHOFERES.forEach((c, i) => request.input('dni' + i, sql.VarChar(20), c.dni));
     const inList = CHOFERES.map((_, i) => '@dni' + i).join(', ');
 
@@ -156,7 +158,7 @@ app.get('/api/presencia', async (req, res) => {
              CASE WHEN f.Dispositivo = 'Facial Entrada' THEN 'in'
                   WHEN f.Dispositivo = 'Facial Salida'  THEN 'out' END AS dir
       FROM FichadasHik.hik.Fichada f
-      WHERE f.Fecha BETWEEN @desde AND @fecha
+      WHERE f.Fecha BETWEEN @fecha AND @hasta
         AND f.Dispositivo IN ('Facial Entrada', 'Facial Salida')
         AND f.DNI IN (${inList})
       ORDER BY f.DNI, f.FechaHora;`;
@@ -210,18 +212,16 @@ app.get('/api/presencia', async (req, res) => {
 
     // Siempre los 18 choferes.
     const choferes = CHOFERES.map((c) => {
-      const planta = enPlantaDia(marcasPorDni[c.dni], fecha, finMin); // null si sin datos
+      const j = jornadaDia(marcasPorDni[c.dni], fecha); // null si no arrancó jornada ese día
       const patentes = patentesPorDni[c.dni] ? [...patentesPorDni[c.dni]] : [];
       return {
         dni: c.dni,
         chofer: c.nombre,
         area: 'Chofer',
         patente: patentes.join(', ') || null,
-        primera: planta?.primera ?? null,   // 1ª marca del día { hora, dir:'E'|'S' }
-        ultima: planta?.ultima ?? null,     // última marca del día { hora, dir:'E'|'S' }
-        minutosEnPlanta: planta?.minutosEnPlanta ?? null, // dentro del perímetro
-        minutosFuera: planta?.minutosFuera ?? null,       // fuera del perímetro (≈ viaje)
-        minutosViaje: viajePorDni[c.dni] ?? null,         // viaje según GPS (validación)
+        entrada: j?.entrada ?? null, // { hora, dia }
+        salida: j?.salida ?? null,   // { hora, dia, otroDia } — otroDia=true si sale al día siguiente
+        minutosViaje: viajePorDni[c.dni] ?? null, // viaje según GPS (pendiente de setup LSGPS)
         destinoHoja: destinoHojaPorDni[c.dni] ? [...destinoHojaPorDni[c.dni]].join(', ') : null,
         destinoGps: destinoGpsPorDni[c.dni] ? [...destinoGpsPorDni[c.dni]].join(', ') : null,
       };

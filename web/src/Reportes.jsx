@@ -1,17 +1,19 @@
 import { useEffect, useState } from 'react';
 import { hoyISO, fmtHs } from './utils.js';
 
-// Marca de perímetro: hora + badge E (entrada) / S (salida).
-function Marca({ m }) {
+// Hora de entrada/salida de la jornada. Si la salida cae al día siguiente
+// (turno noche), se marca con un "+1d".
+function Hora({ m }) {
   if (!m) return '—';
   return (
     <>
-      {m.hora} <span className={'ces ' + (m.dir === 'E' ? 'e' : 's')}>{m.dir}</span>
+      {m.hora}
+      {m.otroDia && <span className="mas1d" title={`Día siguiente (${m.dia})`}>+1d</span>}
     </>
   );
 }
 
-// Tablero: fichada (presencia) + tiempo en viaje (cruce Hoja de Ruta ↔ LSGPS por patente).
+// Tablero: entrada/salida de la jornada (fichada por molinete) + destino/viaje (LSGPS por patente).
 export default function Reportes() {
   const [fecha, setFecha] = useState(hoyISO());
   const [data, setData] = useState(null);
@@ -44,8 +46,7 @@ export default function Reportes() {
   }, []);
 
   const choferes = data?.choferes ?? [];
-  const totalEnPlanta = choferes.reduce((a, c) => a + (c.minutosEnPlanta || 0), 0);
-  const conFichada = choferes.filter((c) => c.minutosEnPlanta != null).length;
+  const conJornada = choferes.filter((c) => c.entrada).length;
   const conHoja = choferes.filter((c) => c.patente).length;
 
   return (
@@ -64,26 +65,21 @@ export default function Reportes() {
             <span className="l">Choferes</span>
           </div>
           <div className="stat">
-            <span className="n">{conFichada}</span>
-            <span className="l">Con fichada</span>
+            <span className="n">{conJornada}</span>
+            <span className="l">Con jornada</span>
           </div>
           <div className="stat">
             <span className="n">{conHoja}</span>
             <span className="l">Con hoja de ruta</span>
           </div>
-          <div className="stat">
-            <span className="n">{fmtHs(totalEnPlanta)}</span>
-            <span className="l">Hs en planta (total)</span>
-          </div>
         </div>
       </section>
 
       <div className="aviso">
-        <b>Hs en planta</b> = tiempo DENTRO del perímetro, con los molinetes reales
-        (<i>Facial Entrada</i>/<i>Facial Salida</i>) y manejo del cruce de medianoche.
-        Los choferes salen de viaje y vuelven, por eso <b>no</b> se usa la primera/última marca del
-        día (invertía entrada/salida en el turno noche). <b>Hs fuera</b> = fuera del perímetro
-        (≈ viaje). <b>Hs en viaje (GPS)</b> valida ese "fuera" con LSGPS (patente de la hoja de ruta).
+        <b>Entrada / Salida</b> = jornada del chofer, con los molinetes reales
+        (<i>Facial Entrada</i>/<i>Facial Salida</i>). La jornada se imputa al día que <b>entra</b>;
+        en el turno noche entra a la tarde y la salida cae al día siguiente (marcada <b>+1d</b>).
+        Las horas <i>en planta</i> quedan pendientes hasta validar entrada/salida.
       </div>
 
       {cob && cob.conVehiculo < cob.total && (
@@ -104,10 +100,8 @@ export default function Reportes() {
                   <th>Chofer</th>
                   <th>DNI</th>
                   <th>Patente (hoja)</th>
-                  <th className="num">1ª marca</th>
-                  <th className="num">Última marca</th>
-                  <th className="num">Hs en planta</th>
-                  <th className="num">Hs fuera</th>
+                  <th className="num">Entrada</th>
+                  <th className="num">Salida</th>
                   <th className="num">Hs en viaje (GPS)</th>
                   <th>Destino (hoja)</th>
                   <th>Destino (GPS)</th>
@@ -116,7 +110,7 @@ export default function Reportes() {
               <tbody>
                 {choferes.length === 0 && (
                   <tr>
-                    <td colSpan={10} className="vacio">
+                    <td colSpan={8} className="vacio">
                       {loading ? 'Cargando…' : 'Sin datos para esta fecha.'}
                     </td>
                   </tr>
@@ -126,14 +120,8 @@ export default function Reportes() {
                     <td>{c.chofer}</td>
                     <td className="mono">{c.dni}</td>
                     <td className="mono">{c.patente ?? '—'}</td>
-                    <td className="num"><Marca m={c.primera} /></td>
-                    <td className="num"><Marca m={c.ultima} /></td>
-                    <td className={'num' + (c.minutosEnPlanta == null ? ' pend' : '')}>
-                      <b>{fmtHs(c.minutosEnPlanta)}</b>
-                    </td>
-                    <td className={'num' + (c.minutosFuera == null ? ' pend' : '')}>
-                      {fmtHs(c.minutosFuera)}
-                    </td>
+                    <td className={'num' + (c.entrada ? '' : ' pend')}><Hora m={c.entrada} /></td>
+                    <td className={'num' + (c.salida ? '' : ' pend')}><Hora m={c.salida} /></td>
                     <td className={'num' + (c.minutosViaje == null ? ' pend' : '')}>
                       {fmtHs(c.minutosViaje)}
                     </td>
