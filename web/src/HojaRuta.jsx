@@ -8,7 +8,7 @@ const VACIO = {
   patenteTractor: '',
   destino: '',
   semiLleva: '',
-  semiIran: '',
+  semi: '',
   hielo: '',
   tambor: '',
   pallets: '',
@@ -113,8 +113,8 @@ export default function HojaRuta() {
             <input type="text" value={form.semiLleva} onChange={set('semiLleva')} />
           </label>
           <label>
-            <span>Semi Iran</span>
-            <input type="text" value={form.semiIran} onChange={set('semiIran')} />
+            <span>Semi</span>
+            <input type="text" value={form.semi} onChange={set('semi')} />
           </label>
           {NUMS.map(([k, etiqueta]) => (
             <label key={k}>

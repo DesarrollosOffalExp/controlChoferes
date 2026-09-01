@@ -39,25 +39,6 @@ export default function App() {
           </span>
         </a>
 
-        {/* Slider: alterna Reportes / Hoja de Ruta */}
-        <div className="switch" role="tablist" aria-label="Vista">
-          <button
-            className={'switch-op' + (vista === 'reportes' ? ' activo' : '')}
-            role="tab" aria-selected={vista === 'reportes'}
-            onClick={() => setVista('reportes')}
-          >
-            Reportes
-          </button>
-          <button
-            className={'switch-op' + (vista === 'hojaruta' ? ' activo' : '')}
-            role="tab" aria-selected={vista === 'hojaruta'}
-            onClick={() => setVista('hojaruta')}
-          >
-            Hoja de Ruta
-          </button>
-          <span className={'switch-thumb ' + vista} aria-hidden="true" />
-        </div>
-
         <div className="userbox">
           <a href={PORTAL_URL} className="navlink navlink-ico" title="Ir al inicio de Offal">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -85,6 +66,24 @@ export default function App() {
       </header>
 
       <main className="content">
+        {/* Pestañas de vista (fuera de la navbar unificada) */}
+        <div className="tabs" role="tablist" aria-label="Vista">
+          <button
+            className={'tab' + (vista === 'reportes' ? ' activo' : '')}
+            role="tab" aria-selected={vista === 'reportes'}
+            onClick={() => setVista('reportes')}
+          >
+            Reportes
+          </button>
+          <button
+            className={'tab' + (vista === 'hojaruta' ? ' activo' : '')}
+            role="tab" aria-selected={vista === 'hojaruta'}
+            onClick={() => setVista('hojaruta')}
+          >
+            Hoja de Ruta
+          </button>
+        </div>
+
         {vista === 'reportes' ? <Reportes /> : <HojaRuta />}
       </main>
     </div>

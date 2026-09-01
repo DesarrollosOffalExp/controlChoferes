@@ -61,13 +61,16 @@ export function enPlantaDia(marks, fecha, finMin = 1440) {
   inside = Math.max(0, Math.round(inside));
   const fuera = Math.max(0, Math.round(finMin - inside));
 
+  // Primera y última marca de PERÍMETRO del día, en orden cronológico y con su
+  // dirección (E=entrada, S=salida). Para el turno noche el día calendario arranca
+  // con una SALIDA (fin del turno de la noche anterior) y termina con una ENTRADA
+  // (inicio del turno); mostrar cronológico + E/S evita que "parezca invertido".
   const hhmm = (ts) => ts.slice(11, 16);
-  const ins = dayEvs.filter((e) => e.dir === 'in');
-  const out = dayEvs.filter((e) => e.dir === 'out');
+  const marca = (e) => (e ? { hora: hhmm(e.ts), dir: e.dir === 'in' ? 'E' : 'S' } : null);
   return {
     minutosEnPlanta: inside,
     minutosFuera: fuera,
-    ingreso: ins.length ? hhmm(ins[0].ts) : null,     // 1er ingreso real del día
-    egreso: out.length ? hhmm(out[out.length - 1].ts) : null, // último egreso real del día
+    primera: marca(dayEvs[0]),
+    ultima: marca(dayEvs[dayEvs.length - 1]),
   };
 }

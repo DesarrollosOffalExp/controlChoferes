@@ -185,8 +185,8 @@ app.get('/api/presencia', async (req, res) => {
         chofer: c.nombre,
         area: 'Chofer',
         patente: patentes.join(', ') || null,
-        ingreso: planta?.ingreso ?? null,   // 1er ingreso real del día (HH:MM)
-        egreso: planta?.egreso ?? null,     // último egreso real del día (HH:MM)
+        primera: planta?.primera ?? null,   // 1ª marca del día { hora, dir:'E'|'S' }
+        ultima: planta?.ultima ?? null,     // última marca del día { hora, dir:'E'|'S' }
         minutosEnPlanta: planta?.minutosEnPlanta ?? null, // dentro del perímetro
         minutosFuera: planta?.minutosFuera ?? null,       // fuera del perímetro (≈ viaje)
         minutosViaje: viajePorDni[c.dni] ?? null,         // viaje según GPS (validación)

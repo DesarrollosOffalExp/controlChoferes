@@ -20,7 +20,7 @@ CREATE TABLE transporte.HojasRuta (
     PatenteTractor VARCHAR(20)   NOT NULL,   -- 4. Patente del Tractor (se cruza con LSGPS)
     Destino        VARCHAR(160)  NULL,       -- 5. Destino
     SemiLleva      VARCHAR(40)   NULL,       -- 6. Semi Lleva
-    SemiIran       VARCHAR(40)   NULL,       -- 7. Semi Iran
+    Semi           VARCHAR(40)   NULL,       -- 7. Semi
     Hielo          INT           NULL,       -- 8. HIELO
     Tambor         INT           NULL,       -- 9. TAMBOR
     Pallets        INT           NULL,       -- 10. PALLETS

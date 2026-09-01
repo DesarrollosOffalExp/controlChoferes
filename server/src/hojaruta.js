@@ -36,7 +36,7 @@ export async function crearHoja(data, creadoPor) {
   r.input('patente', sql.VarChar(20), patente.toUpperCase());
   r.input('destino', sql.VarChar(160), txtOrNull(data.destino, 160));
   r.input('semiLleva', sql.VarChar(40), txtOrNull(data.semiLleva, 40));
-  r.input('semiIran', sql.VarChar(40), txtOrNull(data.semiIran, 40));
+  r.input('semi', sql.VarChar(40), txtOrNull(data.semi, 40));
   r.input('hielo', sql.Int, intOrNull(data.hielo));
   r.input('tambor', sql.Int, intOrNull(data.tambor));
   r.input('pallets', sql.Int, intOrNull(data.pallets));
@@ -47,11 +47,11 @@ export async function crearHoja(data, creadoPor) {
   const q = `
     INSERT INTO ${TABLA}
       (Fecha, NumeroRemito, ChoferDni, ChoferNombre, PatenteTractor, Destino,
-       SemiLleva, SemiIran, Hielo, Tambor, Pallets, AguaOxigenada, TamborHiel, CreadoPor)
+       SemiLleva, Semi, Hielo, Tambor, Pallets, AguaOxigenada, TamborHiel, CreadoPor)
     OUTPUT INSERTED.Id
     VALUES
       (@fecha, @remito, @choferDni, @choferNombre, @patente, @destino,
-       @semiLleva, @semiIran, @hielo, @tambor, @pallets, @aguaOx, @tamborHiel, @creadoPor);`;
+       @semiLleva, @semi, @hielo, @tambor, @pallets, @aguaOx, @tamborHiel, @creadoPor);`;
   const res = await r.query(q);
   return { id: res.recordset[0].Id };
 }
@@ -67,7 +67,7 @@ export async function listarHojas({ desde, hasta } = {}) {
     SELECT Id AS id, CONVERT(varchar(10), Fecha, 23) AS fecha,
            NumeroRemito AS numeroRemito, ChoferDni AS choferDni, ChoferNombre AS choferNombre,
            PatenteTractor AS patenteTractor, Destino AS destino,
-           SemiLleva AS semiLleva, SemiIran AS semiIran,
+           SemiLleva AS semiLleva, Semi AS semi,
            Hielo AS hielo, Tambor AS tambor, Pallets AS pallets,
            AguaOxigenada AS aguaOxigenada, TamborHiel AS tamborHiel,
            CONVERT(varchar(19), CreadoEn, 120) AS creadoEn, CreadoPor AS creadoPor
