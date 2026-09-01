@@ -111,27 +111,17 @@ body {
 }
 .btn-logout:hover { background: var(--panel-2); }
 
-/* Slider / segmented control: alterna Reportes ↔ Hoja de Ruta */
-.switch {
-  position: relative; margin-inline: auto; display: inline-flex;
-  background: var(--panel-2); border: 1px solid var(--line);
-  border-radius: 10px; padding: 3px;
-}
-.switch-op {
-  position: relative; z-index: 1; border: 0; background: transparent;
-  color: var(--muted); font: inherit; font-weight: 600; font-size: 13px;
-  padding: 7px 18px; border-radius: 8px; cursor: pointer; min-width: 108px;
-  transition: color .18s ease;
-}
-.switch-op.activo { color: #fff; }
-.switch-thumb {
-  position: absolute; z-index: 0; top: 3px; bottom: 3px; left: 3px;
-  width: calc(50% - 3px); background: var(--accent); border-radius: 8px;
-  transition: transform .18s ease;
-}
-.switch-thumb.hojaruta { transform: translateX(100%); }
-
 .content { max-width: 1400px; margin: 0 auto; padding: 24px; display: flex; flex-direction: column; gap: 18px; }
+
+/* Pestañas de vista (Reportes / Hoja de Ruta) dentro del contenido */
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); }
+.tab {
+  border: 0; background: transparent; color: var(--muted);
+  font: inherit; font-weight: 600; font-size: 14px; cursor: pointer;
+  padding: 10px 18px; border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+.tab:hover { color: var(--text); }
+.tab.activo { color: #fff; border-bottom-color: var(--accent); }
 
 /* Formulario Hoja de Ruta */
 .card-titulo { margin: 0 0 14px; font-size: 15px; font-weight: 700; }
@@ -193,6 +183,14 @@ input[type='date'] {
 .grilla td.num, .grilla th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .grilla td.mono { font-variant-numeric: tabular-nums; color: var(--muted); }
 .grilla .pend { color: var(--muted); opacity: .6; }
+/* Badge E (entrada) / S (salida) en las marcas de perímetro */
+.ces {
+  display: inline-block; min-width: 16px; padding: 0 4px; margin-left: 4px;
+  border-radius: 4px; font-size: 10px; font-weight: 700; line-height: 15px;
+  text-align: center; vertical-align: middle;
+}
+.ces.e { background: rgba(38, 182, 217, .18); color: var(--accent-2); }
+.ces.s { background: rgba(245, 166, 35, .18); color: var(--warn); }
 .grilla tbody tr:hover { background: var(--panel-2); }
 .vacio { text-align: center; color: var(--muted); padding: 20px; }
 .error { color: #ffb4ad; }

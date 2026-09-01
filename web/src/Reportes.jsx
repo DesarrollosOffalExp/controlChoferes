@@ -1,6 +1,16 @@
 import { useEffect, useState } from 'react';
 import { hoyISO, fmtHs } from './utils.js';
 
+// Marca de perímetro: hora + badge E (entrada) / S (salida).
+function Marca({ m }) {
+  if (!m) return '—';
+  return (
+    <>
+      {m.hora} <span className={'ces ' + (m.dir === 'E' ? 'e' : 's')}>{m.dir}</span>
+    </>
+  );
+}
+
 // Tablero: fichada (presencia) + tiempo en viaje (cruce Hoja de Ruta ↔ LSGPS por patente).
 export default function Reportes() {
   const [fecha, setFecha] = useState(hoyISO());
@@ -94,17 +104,19 @@ export default function Reportes() {
                   <th>Chofer</th>
                   <th>DNI</th>
                   <th>Patente (hoja)</th>
-                  <th className="num">1er ingreso</th>
-                  <th className="num">Últ. egreso</th>
+                  <th className="num">1ª marca</th>
+                  <th className="num">Última marca</th>
                   <th className="num">Hs en planta</th>
                   <th className="num">Hs fuera</th>
                   <th className="num">Hs en viaje (GPS)</th>
+                  <th>Destino (hoja)</th>
+                  <th>Destino (GPS)</th>
                 </tr>
               </thead>
               <tbody>
                 {choferes.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="vacio">
+                    <td colSpan={10} className="vacio">
                       {loading ? 'Cargando…' : 'Sin datos para esta fecha.'}
                     </td>
                   </tr>
@@ -114,8 +126,8 @@ export default function Reportes() {
                     <td>{c.chofer}</td>
                     <td className="mono">{c.dni}</td>
                     <td className="mono">{c.patente ?? '—'}</td>
-                    <td className="num">{c.ingreso ?? '—'}</td>
-                    <td className="num">{c.egreso ?? '—'}</td>
+                    <td className="num"><Marca m={c.primera} /></td>
+                    <td className="num"><Marca m={c.ultima} /></td>
                     <td className={'num' + (c.minutosEnPlanta == null ? ' pend' : '')}>
                       <b>{fmtHs(c.minutosEnPlanta)}</b>
                     </td>
@@ -125,6 +137,8 @@ export default function Reportes() {
                     <td className={'num' + (c.minutosViaje == null ? ' pend' : '')}>
                       {fmtHs(c.minutosViaje)}
                     </td>
+                    <td>{c.destinoHoja ?? '—'}</td>
+                    <td className={c.destinoGps == null ? 'pend' : ''}>{c.destinoGps ?? '—'}</td>
                   </tr>
                 ))}
               </tbody>

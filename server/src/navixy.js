@@ -79,11 +79,15 @@ export async function trackerByPatente(patente, trackers) {
   );
 }
 
-/** '¿este evento es de la geocerca OFFAL EXP?' — tolera string o array. */
-function esOffal(ev) {
+/** Etiqueta(s) de geozona de un evento (tolera string o array). */
+function zoneLabelDe(ev) {
   const z = ev?.extra?.zone_labels ?? ev?.zone_labels ?? ev?.address ?? '';
-  const txt = Array.isArray(z) ? z.join(' ') : String(z);
-  return /offal/i.test(txt);
+  return (Array.isArray(z) ? z.join(', ') : String(z || '')).trim();
+}
+
+/** '¿este evento es de la geocerca OFFAL EXP?' */
+function esOffal(ev) {
+  return /offal/i.test(zoneLabelDe(ev));
 }
 
 /** 'YYYY-MM-DD HH:mm:ss' -> minutos desde la medianoche de esa fecha. */
@@ -105,15 +109,25 @@ function minDelDia(s) {
  */
 export async function viajePorPatente(patente, fecha, finMin = 1440, trackers) {
   const tk = await trackerByPatente(patente, trackers);
-  if (!tk) return { minutosViaje: null, trackerId: null, motivo: 'patente sin tracker en LSGPS' };
+  if (!tk) return { minutosViaje: null, trackerId: null, destinos: [], motivo: 'patente sin tracker en LSGPS' };
 
-  const evs = (await zoneEvents([tk.id], `${fecha} 00:00:00`, `${fecha} 23:59:59`))
+  const raw = await zoneEvents([tk.id], `${fecha} 00:00:00`, `${fecha} 23:59:59`);
+
+  // Destinos: geozonas (que NO son OFFAL) donde el camión ENTRÓ ese día.
+  const destinos = [...new Set(
+    raw
+      .filter((e) => (e.type || e.event) === 'inzone' && !esOffal(e))
+      .map(zoneLabelDe)
+      .filter(Boolean)
+  )];
+
+  const evs = raw
     .filter(esOffal)
     .map((e) => ({ tipo: e.type || e.event, min: minDelDia(e.time || e.date) }))
     .filter((e) => e.min != null && (e.tipo === 'inzone' || e.tipo === 'outzone'))
     .sort((a, b) => a.min - b.min);
 
-  if (evs.length === 0) return { minutosViaje: null, trackerId: tk.id, motivo: 'sin eventos de geocerca ese día' };
+  if (evs.length === 0) return { minutosViaje: null, trackerId: tk.id, destinos, motivo: 'sin eventos de geocerca ese día' };
 
   // Estado inicial (00:00): si el primer evento es "inzone" (llegó a Offal),
   // antes venía de viaje (afuera). Si es "outzone", empezó adentro.
@@ -131,5 +145,5 @@ export async function viajePorPatente(patente, fecha, finMin = 1440, trackers) {
   }
   if (afuera) viaje += Math.max(0, finMin - cursor); // quedó afuera al cierre del día
 
-  return { minutosViaje: Math.round(viaje), trackerId: tk.id, motivo: null };
+  return { minutosViaje: Math.round(viaje), trackerId: tk.id, destinos, motivo: null };
 }
