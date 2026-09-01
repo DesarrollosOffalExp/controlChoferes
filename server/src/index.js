@@ -170,31 +170,38 @@ app.get('/api/presencia', async (req, res) => {
       (marcasPorDni[dni] ||= []).push({ ts: String(r.ts).trim(), dir: r.dir });
     }
 
-    // Hoja de Ruta del día: patente asignada a cada chofer → LSGPS (tiempo en viaje).
-    // Todo en try/catch: si falla (tabla/LSGPS), la fichada se devuelve igual.
-    const patentesPorDni = {}; // dni -> Set(patentes)
-    const viajePorDni = {};    // dni -> minutos en viaje (o null)
+    // Hoja de Ruta del día: patente + destino asignados a cada chofer → LSGPS
+    // (tiempo en viaje + destino real). Todo en try/catch: si falla (tabla/LSGPS),
+    // la fichada se devuelve igual.
+    const patentesPorDni = {};    // dni -> Set(patentes)
+    const destinoHojaPorDni = {}; // dni -> Set(destinos de la hoja)
+    const viajePorDni = {};       // dni -> minutos en viaje (o null)
+    const destinoGpsPorDni = {};  // dni -> Set(geozonas destino según GPS)
     try {
       const hojas = await hojasPorFecha(fecha);
       for (const h of hojas) {
         const dni = String(h.choferDni || '').trim();
         if (!dni || !h.patenteTractor) continue;
         (patentesPorDni[dni] ||= new Set()).add(String(h.patenteTractor).trim());
+        if (h.destino) (destinoHojaPorDni[dni] ||= new Set()).add(String(h.destino).trim());
       }
       if (Object.keys(patentesPorDni).length) {
         const trackers = await trackerList(); // cache una vez para todas las patentes
-        const cachePat = {}; // patente -> minutosViaje
+        const cachePat = {}; // patente -> { minutosViaje, destinos }
         for (const [dni, pats] of Object.entries(patentesPorDni)) {
           let suma = 0;
           let algunoResuelto = false;
+          const dest = new Set();
           for (const pat of pats) {
             if (cachePat[pat] === undefined) {
-              const v = await viajePorPatente(pat, fecha, finMin, trackers);
-              cachePat[pat] = v.minutosViaje; // number o null
+              cachePat[pat] = await viajePorPatente(pat, fecha, finMin, trackers);
             }
-            if (cachePat[pat] != null) { suma += cachePat[pat]; algunoResuelto = true; }
+            const v = cachePat[pat];
+            if (v.minutosViaje != null) { suma += v.minutosViaje; algunoResuelto = true; }
+            for (const d of v.destinos || []) dest.add(d);
           }
           viajePorDni[dni] = algunoResuelto ? suma : null;
+          if (dest.size) destinoGpsPorDni[dni] = dest;
         }
       }
     } catch (e) {
@@ -215,6 +222,8 @@ app.get('/api/presencia', async (req, res) => {
         minutosEnPlanta: planta?.minutosEnPlanta ?? null, // dentro del perímetro
         minutosFuera: planta?.minutosFuera ?? null,       // fuera del perímetro (≈ viaje)
         minutosViaje: viajePorDni[c.dni] ?? null,         // viaje según GPS (validación)
+        destinoHoja: destinoHojaPorDni[c.dni] ? [...destinoHojaPorDni[c.dni]].join(', ') : null,
+        destinoGps: destinoGpsPorDni[c.dni] ? [...destinoGpsPorDni[c.dni]].join(', ') : null,
       };
     }).sort((a, b) => a.chofer.localeCompare(b.chofer, 'es'));
 

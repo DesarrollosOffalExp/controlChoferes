@@ -109,12 +109,14 @@ export default function Reportes() {
                   <th className="num">Hs en planta</th>
                   <th className="num">Hs fuera</th>
                   <th className="num">Hs en viaje (GPS)</th>
+                  <th>Destino (hoja)</th>
+                  <th>Destino (GPS)</th>
                 </tr>
               </thead>
               <tbody>
                 {choferes.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="vacio">
+                    <td colSpan={10} className="vacio">
                       {loading ? 'Cargando…' : 'Sin datos para esta fecha.'}
                     </td>
                   </tr>
@@ -135,6 +137,8 @@ export default function Reportes() {
                     <td className={'num' + (c.minutosViaje == null ? ' pend' : '')}>
                       {fmtHs(c.minutosViaje)}
                     </td>
+                    <td>{c.destinoHoja ?? '—'}</td>
+                    <td className={c.destinoGps == null ? 'pend' : ''}>{c.destinoGps ?? '—'}</td>
                   </tr>
                 ))}
               </tbody>
