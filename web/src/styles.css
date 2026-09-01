@@ -191,6 +191,11 @@ input[type='date'] {
 }
 .ces.e { background: rgba(38, 182, 217, .18); color: var(--accent-2); }
 .ces.s { background: rgba(245, 166, 35, .18); color: var(--warn); }
+/* Marca "+1d": la salida cae al día siguiente (turno noche) */
+.mas1d {
+  margin-left: 5px; padding: 0 5px; border-radius: 4px; font-size: 10px; font-weight: 700;
+  background: rgba(245, 166, 35, .18); color: var(--warn); vertical-align: middle;
+}
 .grilla tbody tr:hover { background: var(--panel-2); }
 .vacio { text-align: center; color: var(--muted); padding: 20px; }
 .error { color: #ffb4ad; }

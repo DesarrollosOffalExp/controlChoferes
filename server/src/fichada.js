@@ -1,13 +1,13 @@
-// Tiempo DENTRO del perímetro (planta) por día calendario, usando los molinetes
-// reales de Hikvision (Dispositivo = 'Facial Entrada' / 'Facial Salida').
+// Entrada/Salida de la JORNADA por día, usando los molinetes reales de Hikvision
+// (Dispositivo = 'Facial Entrada' / 'Facial Salida').
 //
-// Por qué así (y no MIN/MAX del día): los choferes SALEN de viaje y VUELVEN, con la
-// jornada cruzando la medianoche. Tomar la primera/última marca del día calendario
-// invierte entrada/salida (la 1ª marca suele ser una SALIDA y la última una ENTRADA)
-// y cuenta el viaje como si fuera tiempo en planta. Con la dirección real del molinete
-// reconstruimos los tramos dentro/fuera y medimos las horas DENTRO en [00:00, fin].
+// La jornada se imputa al día en que ENTRA (arranca). El turno noche entra a la
+// tarde (~18h) y sale al día siguiente a la madrugada, así que la Salida se busca
+// DESPUÉS de la entrada (puede caer al día siguiente). No se corta por día calendario
+// (eso partía la jornada y mostraba entrada=salida, ej. Lezcano 31/08 = 18:57 y 18:57).
 
 const TZ_OFFSET_MIN = 180; // Argentina = UTC-3
+const MAX_JORNADA_MIN = 18 * 60; // tope de una jornada (turno + viajes) para acotar la salida
 
 /** "Ahora" en horario de Argentina: { fecha:'YYYY-MM-DD', min: minutos desde 00:00 }. */
 export function ahoraArg() {
@@ -15,62 +15,36 @@ export function ahoraArg() {
   return { fecha: d.toISOString().slice(0, 10), min: d.getUTCHours() * 60 + d.getUTCMinutes() };
 }
 
-// 'YYYY-MM-DD HH:MM:SS' (hora local) -> minutos respecto de la medianoche de `fecha`
-// (negativo si la marca es de un día anterior). Se calcula en UTC para no depender de TZ.
-function offMin(ts, fecha) {
-  const base = Date.parse(`${fecha}T00:00:00Z`);
-  return (Date.parse(`${ts.replace(' ', 'T')}Z`) - base) / 60000;
-}
+const epoch = (ts) => Date.parse(`${ts.replace(' ', 'T')}Z`); // 'YYYY-MM-DD HH:MM:SS' (hora local)
 
 /**
- * @param marks  [{ ts:'YYYY-MM-DD HH:MM:SS', dir:'in'|'out' }] — incluir días previos
- *               para conocer el estado en 00:00 (dentro/fuera).
- * @param fecha  'YYYY-MM-DD'
- * @param finMin minuto del día donde cortar (1440 para días pasados; hora actual si es hoy)
- * @returns { minutosEnPlanta, minutosFuera, ingreso, egreso } | null (sin datos)
+ * @param marks [{ ts:'YYYY-MM-DD HH:MM:SS', dir:'in'|'out' }] — ventana que incluye
+ *              el día `fecha` y el siguiente (la salida del turno noche cae al otro día).
+ * @param fecha 'YYYY-MM-DD'
+ * @returns { entrada:{hora,dia}, salida:{hora,dia,otroDia}|null } | null (no inició jornada ese día)
  */
-export function enPlantaDia(marks, fecha, finMin = 1440) {
+export function jornadaDia(marks, fecha) {
   if (!marks || marks.length === 0) return null;
   const evs = marks
-    .map((m) => ({ min: offMin(m.ts, fecha), dir: m.dir, ts: m.ts }))
-    .sort((a, b) => a.min - b.min);
+    .map((m) => ({ t: epoch(m.ts), dir: m.dir, ts: m.ts }))
+    .sort((a, b) => a.t - b.t);
 
-  // Estado en 00:00: según el último evento ANTERIOR al día.
-  let state = null;
+  // Entrada = primer ingreso (Facial Entrada) cuyo día calendario es `fecha`.
+  const entrada = evs.find((e) => e.dir === 'in' && e.ts.slice(0, 10) === fecha);
+  if (!entrada) return null; // no arrancó jornada ese día (p. ej. sólo tiene la salida del turno anterior)
+
+  // Salida = última salida (Facial Salida) posterior a la entrada, dentro del tope de jornada.
+  const limite = entrada.t + MAX_JORNADA_MIN * 60000;
+  let salida = null;
   for (const e of evs) {
-    if (e.min < 0) state = e.dir === 'in' ? 'inside' : 'outside';
-    else break;
+    if (e.dir === 'out' && e.t > entrada.t && e.t <= limite) salida = e;
   }
 
-  const dayEvs = evs.filter((e) => e.min >= 0 && e.min <= finMin);
-  if (state === null && dayEvs.length === 0) return null; // sin info útil para el día
-
-  // Sin contexto previo: inferir del primer evento del día. Si lo primero que hace es
-  // SALIR, venía de adentro; si ENTRA, venía de afuera.
-  if (state === null) state = dayEvs[0].dir === 'in' ? 'outside' : 'inside';
-
-  let cursor = 0;
-  let inside = 0;
-  for (const e of dayEvs) {
-    if (state === 'inside') inside += e.min - cursor;
-    state = e.dir === 'in' ? 'inside' : 'outside';
-    cursor = e.min;
-  }
-  if (state === 'inside') inside += finMin - cursor; // sigue dentro hasta el corte
-
-  inside = Math.max(0, Math.round(inside));
-  const fuera = Math.max(0, Math.round(finMin - inside));
-
-  // Primera y última marca de PERÍMETRO del día, en orden cronológico y con su
-  // dirección (E=entrada, S=salida). Para el turno noche el día calendario arranca
-  // con una SALIDA (fin del turno de la noche anterior) y termina con una ENTRADA
-  // (inicio del turno); mostrar cronológico + E/S evita que "parezca invertido".
   const hhmm = (ts) => ts.slice(11, 16);
-  const marca = (e) => (e ? { hora: hhmm(e.ts), dir: e.dir === 'in' ? 'E' : 'S' } : null);
   return {
-    minutosEnPlanta: inside,
-    minutosFuera: fuera,
-    primera: marca(dayEvs[0]),
-    ultima: marca(dayEvs[dayEvs.length - 1]),
+    entrada: { hora: hhmm(entrada.ts), dia: entrada.ts.slice(0, 10) },
+    salida: salida
+      ? { hora: hhmm(salida.ts), dia: salida.ts.slice(0, 10), otroDia: salida.ts.slice(0, 10) !== fecha }
+      : null,
   };
 }

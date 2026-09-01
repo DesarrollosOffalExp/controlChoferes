@@ -132,7 +132,7 @@ export default function HojaRuta() {
             <input type="text" list="dl-semis" value={form.semiLleva} onChange={set('semiLleva')} />
           </label>
           <label>
-            <span>Semi</span>
+            <span>Semi Trae</span>
             <input type="text" list="dl-semis" value={form.semi} onChange={set('semi')} />
           </label>
           {NUMS.map(([k, etiqueta]) => (
@@ -143,19 +143,16 @@ export default function HojaRuta() {
           ))}
 
           {/* Opciones de los desplegables (reusadas de Lavado de Camiones).
-              Son combobox: se elige de la lista o se tipea si no está. */}
+              Son combobox: se elige de la lista o se tipea si no está.
+              Se muestra SOLO la patente (sin repetir el tipo de unidad). */}
           <datalist id="dl-tractores">
             {tractores.map((p) => (
-              <option key={p.codigo} value={p.codigo}>
-                {p.tipoUnidad ? `${p.codigo} — ${p.tipoUnidad}` : p.codigo}
-              </option>
+              <option key={p.codigo} value={p.codigo} />
             ))}
           </datalist>
           <datalist id="dl-semis">
             {semis.map((p) => (
-              <option key={p.codigo} value={p.codigo}>
-                {p.tipoUnidad ? `${p.codigo} — ${p.tipoUnidad}` : p.codigo}
-              </option>
+              <option key={p.codigo} value={p.codigo} />
             ))}
           </datalist>
           <datalist id="dl-destinos">
