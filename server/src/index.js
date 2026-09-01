@@ -8,6 +8,7 @@ import { CHOFERES } from './choferes.js';
 import { employeeList, trackerList, viajePorPatente } from './navixy.js';
 import { crearHoja, listarHojas, hojasPorFecha, anularHoja } from './hojaruta.js';
 import { enPlantaDia, ahoraArg } from './fichada.js';
+import { listarPatentes, listarFrigorificos } from './lavados.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -44,6 +45,30 @@ app.get('/api/hoja-ruta', async (req, res) => {
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Error consultando hojas de ruta.', detalle: e.message });
+  }
+});
+
+/**
+ * Catálogos reusados de Lavado de Camiones (para los desplegables de la hoja).
+ * GET /api/lavados/patentes  → [{ codigo, tipoUnidad, modelo, marca }]
+ * GET /api/lavados/frigorificos → [{ nombre }]
+ * Si falla (sin acceso a lavados.*), devuelve lista vacía → el form cae a texto libre.
+ */
+app.get('/api/lavados/patentes', async (_req, res) => {
+  try {
+    res.json({ patentes: await listarPatentes() });
+  } catch (e) {
+    console.error('No se pudo leer lavados.Patentes:', e.message);
+    res.json({ patentes: [], error: e.message });
+  }
+});
+
+app.get('/api/lavados/frigorificos', async (_req, res) => {
+  try {
+    res.json({ frigorificos: await listarFrigorificos() });
+  } catch (e) {
+    console.error('No se pudo leer lavados.Frigorificos:', e.message);
+    res.json({ frigorificos: [], error: e.message });
   }
 });
 

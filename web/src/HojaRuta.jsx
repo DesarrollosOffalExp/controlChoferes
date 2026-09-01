@@ -27,6 +27,8 @@ const NUMS = [
 
 export default function HojaRuta() {
   const [choferes, setChoferes] = useState([]);
+  const [patentes, setPatentes] = useState([]);      // catálogo de Lavado de Camiones
+  const [frigorificos, setFrigorificos] = useState([]);
   const [form, setForm] = useState(VACIO);
   const [guardando, setGuardando] = useState(false);
   const [msg, setMsg] = useState(null); // { tipo:'ok'|'error', texto }
@@ -46,8 +48,25 @@ export default function HojaRuta() {
       .then((r) => (r.ok ? r.json() : { choferes: [] }))
       .then((d) => setChoferes(d.choferes || []))
       .catch(() => setChoferes([]));
+    fetch('/api/lavados/patentes')
+      .then((r) => (r.ok ? r.json() : { patentes: [] }))
+      .then((d) => setPatentes(d.patentes || []))
+      .catch(() => setPatentes([]));
+    fetch('/api/lavados/frigorificos')
+      .then((r) => (r.ok ? r.json() : { frigorificos: [] }))
+      .then((d) => setFrigorificos(d.frigorificos || []))
+      .catch(() => setFrigorificos([]));
     cargarHojas();
   }, []);
+
+  // Filtra el catálogo por tipo de unidad (texto libre). Si el filtro queda vacío
+  // (TipoUnidad no cargado), cae a mostrar TODAS las patentes.
+  const porTipo = (re) => {
+    const f = patentes.filter((p) => re.test(p.tipoUnidad || ''));
+    return f.length ? f : patentes;
+  };
+  const tractores = porTipo(/tractor/i);
+  const semis = porTipo(/semi|chasis|balanc|batea/i);
 
   async function guardar(e) {
     e.preventDefault();
@@ -101,20 +120,20 @@ export default function HojaRuta() {
           </label>
           <label>
             <span>Patente del Tractor *</span>
-            <input type="text" value={form.patenteTractor} onChange={set('patenteTractor')}
-              placeholder="AB123CD" required />
+            <input type="text" list="dl-tractores" value={form.patenteTractor}
+              onChange={set('patenteTractor')} placeholder="AB123CD" required />
           </label>
           <label className="hr-ancho">
             <span>Destino</span>
-            <input type="text" value={form.destino} onChange={set('destino')} />
+            <input type="text" list="dl-destinos" value={form.destino} onChange={set('destino')} />
           </label>
           <label>
             <span>Semi Lleva</span>
-            <input type="text" value={form.semiLleva} onChange={set('semiLleva')} />
+            <input type="text" list="dl-semis" value={form.semiLleva} onChange={set('semiLleva')} />
           </label>
           <label>
             <span>Semi</span>
-            <input type="text" value={form.semi} onChange={set('semi')} />
+            <input type="text" list="dl-semis" value={form.semi} onChange={set('semi')} />
           </label>
           {NUMS.map(([k, etiqueta]) => (
             <label key={k}>
@@ -122,6 +141,28 @@ export default function HojaRuta() {
               <input type="number" min="0" value={form[k]} onChange={set(k)} />
             </label>
           ))}
+
+          {/* Opciones de los desplegables (reusadas de Lavado de Camiones).
+              Son combobox: se elige de la lista o se tipea si no está. */}
+          <datalist id="dl-tractores">
+            {tractores.map((p) => (
+              <option key={p.codigo} value={p.codigo}>
+                {p.tipoUnidad ? `${p.codigo} — ${p.tipoUnidad}` : p.codigo}
+              </option>
+            ))}
+          </datalist>
+          <datalist id="dl-semis">
+            {semis.map((p) => (
+              <option key={p.codigo} value={p.codigo}>
+                {p.tipoUnidad ? `${p.codigo} — ${p.tipoUnidad}` : p.codigo}
+              </option>
+            ))}
+          </datalist>
+          <datalist id="dl-destinos">
+            {frigorificos.map((f) => (
+              <option key={f.nombre} value={f.nombre} />
+            ))}
+          </datalist>
 
           <div className="hr-acciones">
             <button className="btn" type="submit" disabled={guardando}>
