@@ -254,6 +254,18 @@ input[type='date'] {
   border-radius: 10px; padding: 10px 14px; font-size: 13px; color: #f3d08a;
 }
 .aviso.lsgps { background: rgba(199, 22, 58, .1); border-color: var(--accent); color: #f2b8c2; }
+
+/* Panel "¿Cómo se calcula?" (explicación de las columnas del reporte) */
+.explica { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
+.explica > summary { cursor: pointer; padding: 12px 16px; font-weight: 600; font-size: 13px; color: var(--accent-2); list-style: none; }
+.explica > summary::-webkit-details-marker { display: none; }
+.explica > summary::before { content: "▸ "; }
+.explica[open] > summary::before { content: "▾ "; }
+.explica-body { padding: 2px 18px 16px; font-size: 13px; color: var(--text); line-height: 1.55; }
+.explica-body ul { margin: 8px 0; padding-left: 18px; }
+.explica-body li { margin: 5px 0; }
+.explica-body .fuentes span { color: var(--accent-2); font-weight: 600; }
+.gpsnote { color: var(--warn); font-size: 11px; }
 .aviso.lsgps details { margin-top: 6px; }
 .aviso.lsgps summary { cursor: pointer; font-weight: 600; color: #fff; }
 .aviso.lsgps .lsgps-lista { margin: 8px 0 0; padding-left: 18px; }
