@@ -1,24 +1,9 @@
-import { fmtHs, tiemposHoja } from './utils.js';
-
 // Hoja de ruta imprimible (A4) con el membrete oficial de Offal (formato REG) + logo.
-// Se muestra como overlay; "Imprimir" usa window.print() y el @media print aísla la hoja.
-
-const toMin = (s) => { const m = /^(\d{2}):(\d{2})$/.exec(s || ''); return m ? +m[1] * 60 + +m[2] : null; };
-
-function Hora({ t, base }) {
-  if (!t) return <>—</>;
-  const otroDia = base && toMin(t) != null && toMin(base) != null && toMin(t) < toMin(base);
-  return <>{t}{otroDia && <span className="nd">+1d</span>}</>;
-}
+// Los HORARIOS van en BLANCO: los completan a lapicera Vigilancia (planta) y el
+// Chofer (destino). Se muestra como overlay; "Imprimir" usa window.print().
 
 export default function HojaRutaImprimible({ hoja, onClose }) {
   const h = hoja || {};
-  const { viaje, geozona, ida, vuelta } = tiemposHoja(h);
-  const fuera = (() => {
-    const a = toMin(h.salidaPlanta), b = toMin(h.llegadaPlanta);
-    if (a == null || b == null) return null;
-    let d = b - a; if (d < 0) d += 1440; return d;
-  })();
   const dash = (x) => (x == null || x === '' ? '—' : x);
 
   return (
@@ -72,21 +57,17 @@ export default function HojaRutaImprimible({ hoja, onClose }) {
         </div>
 
         <div className="hr-sec">
-          <div className="hr-band">Horarios del viaje</div>
-          <div className="hr-horarios">
-            <div className="hr-timeline">
-              <div className="hr-stop"><div className="hr-dot"></div><div className="hr-lbl">Salida Planta<br/>(Vigilancia)</div><div className="hr-time"><Hora t={h.salidaPlanta} /></div></div>
-              <div className="hr-leg viaje"><div className="hr-bar"></div><div className="hr-leg-lbl">Viaje ida</div><div className="hr-leg-dur">{fmtHs(ida)}</div></div>
-              <div className="hr-stop"><div className="hr-dot"></div><div className="hr-lbl">Llegada Destino<br/>(Chofer)</div><div className="hr-time"><Hora t={h.llegadaDestino} base={h.salidaPlanta} /></div></div>
-              <div className="hr-leg zona"><div className="hr-bar"></div><div className="hr-leg-lbl">En geozona</div><div className="hr-leg-dur">{fmtHs(geozona)}</div></div>
-              <div className="hr-stop"><div className="hr-dot"></div><div className="hr-lbl">Salida Destino<br/>(Chofer)</div><div className="hr-time"><Hora t={h.salidaDestino} base={h.salidaPlanta} /></div></div>
-              <div className="hr-leg viaje"><div className="hr-bar"></div><div className="hr-leg-lbl">Viaje vuelta</div><div className="hr-leg-dur">{fmtHs(vuelta)}</div></div>
-              <div className="hr-stop"><div className="hr-dot"></div><div className="hr-lbl">Llegada Planta<br/>(Vigilancia)</div><div className="hr-time"><Hora t={h.llegadaPlanta} base={h.salidaPlanta} /></div></div>
+          <div className="hr-band">Horarios del viaje — <span className="hr-band-note">a completar en el momento</span></div>
+          <div className="hr-horas">
+            <div className="hr-hgroup">
+              <div className="hr-hgroup-t">Completa Vigilancia</div>
+              <div className="hr-hrow"><span className="hr-hlbl">Salida de Planta</span><span className="hr-hbox"></span></div>
+              <div className="hr-hrow"><span className="hr-hlbl">Regreso a Planta</span><span className="hr-hbox"></span></div>
             </div>
-            <div className="hr-metrics">
-              <div className="hr-metric"><div className="hr-m-lbl">Hs en viaje</div><div className="hr-m-val">{fmtHs(viaje)}</div><div className="hr-m-src">ida + vuelta</div></div>
-              <div className="hr-metric zona"><div className="hr-m-lbl">Hs en geozona</div><div className="hr-m-val">{fmtHs(geozona)}</div><div className="hr-m-src">en el destino</div></div>
-              <div className="hr-metric"><div className="hr-m-lbl">Fuera de planta</div><div className="hr-m-val">{fmtHs(fuera)}</div><div className="hr-m-src">viaje completo</div></div>
+            <div className="hr-hgroup">
+              <div className="hr-hgroup-t">Completa el Chofer</div>
+              <div className="hr-hrow"><span className="hr-hlbl">Llegada al Destino</span><span className="hr-hbox"></span></div>
+              <div className="hr-hrow"><span className="hr-hlbl">Salida del Destino</span><span className="hr-hbox"></span></div>
             </div>
           </div>
         </div>

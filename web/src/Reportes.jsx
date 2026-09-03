@@ -72,9 +72,10 @@ export default function Reportes() {
 
       <div className="aviso">
         <b>Entrada / Salida</b> salen de la fichada (molinetes reales); la jornada se imputa al día que
-        <b> entra</b> (turno noche: sale al día siguiente, marcado <b>+1d</b>). <b>Hs en viaje</b> y
-        <b> Hs en geozona</b> se calculan con los <b>horarios</b> cargados en la Hoja de Ruta;
-        <b> Hs en planta</b> = jornada − viaje. Donde falta la hoja o los horarios, va "—".
+        <b> entra</b> (turno noche: sale al día siguiente, marcado <b>+1d</b>). <b>Hs en planta / en
+        viaje / en geozona</b> se calculan automáticamente desde el <b>GPS (Navixy)</b> por la patente
+        de la hoja de ruta (Navixy registra la entrada/salida de la planta y de cada destino).
+        <i> Cálculo en integración</i> — por ahora en "—".
       </div>
 
       <section className="card">

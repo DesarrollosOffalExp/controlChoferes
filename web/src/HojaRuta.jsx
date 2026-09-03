@@ -15,19 +15,7 @@ const VACIO = {
   pallets: '',
   aguaOxigenada: '',
   tamborHiel: '',
-  salidaPlanta: '',
-  llegadaDestino: '',
-  salidaDestino: '',
-  llegadaPlanta: '',
 };
-
-// Horarios del viaje (los 4 tiempos que alimentan las métricas).
-const HORARIOS = [
-  ['salidaPlanta', 'Salida de Planta (Vigilancia)'],
-  ['llegadaDestino', 'Llegada Destino (Chofer)'],
-  ['salidaDestino', 'Salida Destino (Chofer)'],
-  ['llegadaPlanta', 'Llegada a Planta (Vigilancia)'],
-];
 
 // Campos numéricos (cantidades).
 const NUMS = [
@@ -156,13 +144,8 @@ export default function HojaRuta() {
             </label>
           ))}
 
-          <div className="sub-titulo">Horarios del viaje</div>
-          {HORARIOS.map(([k, etiqueta]) => (
-            <label key={k}>
-              <span>{etiqueta}</span>
-              <input type="time" value={form[k]} onChange={set(k)} />
-            </label>
-          ))}
+          {/* Los HORARIOS no se cargan acá: se completan a lapicera en la hoja impresa
+              (Vigilancia la planta, Chofer el destino) y para el reporte salen de Navixy. */}
 
           {/* Opciones de los desplegables (reusadas de Lavado de Camiones).
               Son combobox: se elige de la lista o se tipea si no está.
