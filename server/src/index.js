@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import 'dotenv/config';
 import { getInweb, sql } from './db.js';
 import { CHOFERES } from './choferes.js';
-import { employeeList, trackerList, zoneEvents, trackerByPatente, metricasDeEventos } from './navixy.js';
+import { employeeList, trackerList, zoneEvents, trackerByPatente, viajesDeEventos } from './navixy.js';
 import { crearHoja, listarHojas, hojasPorFecha, anularHoja } from './hojaruta.js';
 import { jornadaDia } from './fichada.js';
 import { listarPatentes, listarFrigorificos } from './lavados.js';
@@ -172,29 +172,35 @@ app.get('/api/presencia', async (req, res) => {
     const jorPorDni = {};
     for (const c of CHOFERES) jorPorDni[c.dni] = jornadaDia(marcasPorDni[c.dni], fecha);
 
-    // Hoja de Ruta del día: patente y destino por chofer (el vínculo chofer↔patente).
-    const patPorDni = {};  // dni -> Set(patentes)
-    const destPorDni = {}; // dni -> Set(destinos de la hoja)
+    // Hoja de Ruta del día por chofer: aporta el vínculo chofer↔patente↔destino.
+    // Ordenadas por Id (orden de carga) para el desglose "viaje 1, viaje 2…".
+    const hojasPorDni = {}; // dni -> [{ destino, patente }]
     try {
       const hojas = await hojasPorFecha(fecha);
+      hojas.sort((a, b) => a.id - b.id);
       for (const h of hojas) {
         const dni = String(h.choferDni || '').trim();
         if (!dni) continue;
-        if (h.patenteTractor) (patPorDni[dni] ||= new Set()).add(String(h.patenteTractor).trim());
-        if (h.destino) (destPorDni[dni] ||= new Set()).add(String(h.destino).trim());
+        (hojasPorDni[dni] ||= []).push({
+          destino: h.destino ? String(h.destino).trim() : null,
+          patente: h.patenteTractor ? String(h.patenteTractor).trim() : null,
+        });
       }
     } catch (e) {
       console.error('Hoja de Ruta falló (se devuelve solo fichada):', e.message);
     }
 
-    // Métricas desde NAVIXY (GPS): por la patente de la hoja → geocercas del tracker,
-    // acotadas a la jornada del chofer. planta+geozona+viaje = jornada.
+    // Cruce con NAVIXY (GPS) por patente, acotado a la jornada. Los viajes del GPS se
+    // asignan a las hojas POR ORDEN DE HORA (viaje 1 → hoja 1, …). Los viajes de más
+    // (sin hoja) se EXCLUYEN de las horas y se marcan como advertencia.
     const epochLocal = (ts) => Date.parse(`${ts.replace(' ', 'T')}Z`);
-    const metPorDni = {};  // dni -> { minPlanta, minGeozona, minViaje, destinos }
+    const gpsPorDni = {}; // dni -> { plantaMin, trips:[...] }
     try {
       const necesarias = new Set();
       for (const c of CHOFERES) {
-        if (jorPorDni[c.dni]?.salida && patPorDni[c.dni]) for (const p of patPorDni[c.dni]) necesarias.add(p);
+        if (jorPorDni[c.dni]?.salida && hojasPorDni[c.dni]) {
+          for (const h of hojasPorDni[c.dni]) if (h.patente) necesarias.add(h.patente);
+        }
       }
       if (necesarias.size) {
         const trackers = await trackerList();
@@ -202,7 +208,6 @@ app.get('/api/presencia', async (req, res) => {
         for (const p of necesarias) { const tk = await trackerByPatente(p, trackers); if (tk) trkPorPat[p] = tk.id; }
         const trackerIds = [...new Set(Object.values(trkPorPat))];
         if (trackerIds.length) {
-          // Ventana amplia (día previo → 2 días después) para el estado inicial y el turno noche.
           const d0 = Date.parse(`${fecha}T00:00:00Z`);
           const desde = new Date(d0 - 86400000).toISOString().slice(0, 10);
           const hasta2 = new Date(d0 + 2 * 86400000).toISOString().slice(0, 10);
@@ -211,38 +216,81 @@ app.get('/api/presencia', async (req, res) => {
           for (const e of raw) (evPorTracker[e.tracker_id] ||= []).push(e);
           for (const c of CHOFERES) {
             const j = jorPorDni[c.dni];
-            if (!j?.salida || !patPorDni[c.dni]) continue;
+            const hs = hojasPorDni[c.dni];
+            if (!j?.salida || !hs) continue;
             const desdeMs = epochLocal(`${j.entrada.dia} ${j.entrada.hora}:00`);
             const hastaMs = epochLocal(`${j.salida.dia} ${j.salida.hora}:00`);
-            for (const p of patPorDni[c.dni]) {
+            const pats = [...new Set(hs.map((h) => h.patente).filter(Boolean))];
+            let planta = null;
+            let trips = [];
+            for (const p of pats) {
               const tid = trkPorPat[p];
               if (!tid) continue;
-              const m = metricasDeEventos(evPorTracker[tid] || [], desdeMs, hastaMs);
-              if (m) { metPorDni[c.dni] = m; break; } // primera patente que resuelve
+              const r = viajesDeEventos(evPorTracker[tid] || [], desdeMs, hastaMs);
+              if (!r) continue;
+              if (planta == null) planta = r.plantaMin; // planta de la patente principal
+              trips = trips.concat(r.trips);
+            }
+            if (planta != null) {
+              trips.sort((a, b) => `${a.iniFecha} ${a.iniHora}`.localeCompare(`${b.iniFecha} ${b.iniHora}`));
+              gpsPorDni[c.dni] = { plantaMin: planta, trips };
             }
           }
         }
       }
     } catch (e) {
-      console.error('Métricas Navixy fallaron (se devuelve fichada):', e.message);
+      console.error('Cruce Navixy falló (se devuelve fichada):', e.message);
     }
 
     // Siempre los 18 choferes.
     const choferes = CHOFERES.map((c) => {
       const j = jorPorDni[c.dni];
-      const m = metPorDni[c.dni];
-      const destinos = new Set([...(destPorDni[c.dni] || []), ...((m && m.destinos) || [])]);
+      const hs = hojasPorDni[c.dni] || [];
+      const gps = gpsPorDni[c.dni];
+      const jornadaMin = j?.salida
+        ? Math.round((epochLocal(`${j.salida.dia} ${j.salida.hora}:00`) - epochLocal(`${j.entrada.dia} ${j.entrada.hora}:00`)) / 60000)
+        : null;
+
+      // Asignar viajes del GPS a las hojas por orden; sobrantes = sin hoja (excluidos).
+      let viajes = [];   // desglose por hoja autorizada
+      let sinHoja = [];  // viajes del GPS sin hoja (advertencia)
+      let minPlanta = null, minViaje = null, minGeozona = null;
+      if (gps) {
+        minPlanta = gps.plantaMin;
+        minViaje = 0;
+        minGeozona = 0;
+        hs.forEach((h, i) => {
+          const t = gps.trips[i];
+          const vm = t ? t.viajeMin : 0;
+          const gm = t ? t.geozonaMin : 0;
+          minViaje += vm;
+          minGeozona += gm;
+          viajes.push({ destino: h.destino, viajeMin: vm, geozonaMin: gm });
+        });
+        sinHoja = gps.trips.slice(hs.length).map((t) => ({
+          destinos: t.destinos,
+          fecha: t.iniFecha,
+          horaIni: t.iniHora,
+          horaFin: t.finHora,
+        }));
+      }
+
+      const patentes = [...new Set(hs.map((h) => h.patente).filter(Boolean))];
+      const destinos = hs.map((h) => h.destino).filter(Boolean);
       return {
         dni: c.dni,
         chofer: c.nombre,
         area: 'Chofer',
-        patente: patPorDni[c.dni] ? [...patPorDni[c.dni]].join(', ') : null,
-        destino: destinos.size ? [...destinos].join(', ') : null,
+        patente: patentes.join(', ') || null,
         entrada: j?.entrada ?? null, // { hora, dia }
         salida: j?.salida ?? null,   // { hora, dia, otroDia }
-        minEnPlanta: m?.minPlanta ?? null,
-        minViaje: m?.minViaje ?? null,
-        minGeozona: m?.minGeozona ?? null,
+        jornadaMin,                  // salida − entrada (fichada)
+        minEnPlanta: minPlanta,
+        minViaje,
+        minGeozona,
+        destino: destinos.length === 1 ? destinos[0] : null, // 1 hoja → su destino; varias → desglose
+        viajes,   // [{destino, viajeMin, geozonaMin}] — sub-filas si hay varias hojas
+        sinHoja,  // [{destinos, fecha, horaIni, horaFin}] — advertencia (!)
       };
     }).sort((a, b) => a.chofer.localeCompare(b.chofer, 'es'));
 

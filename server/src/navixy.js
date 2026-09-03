@@ -91,49 +91,75 @@ function esOffal(ev) {
 }
 
 const epoch = (ts) => Date.parse(`${String(ts || '').replace(' ', 'T')}Z`);
+// ms -> hora/fecha local (los ts vienen como hora local y se parsean con 'Z', así que
+// toISOString devuelve la misma hora de pared).
+const fmtMs = (ms) => { const d = new Date(ms).toISOString(); return { fecha: d.slice(0, 10), hora: d.slice(11, 16) }; };
 
 /**
- * Las 3 métricas (en minutos) a partir de los eventos de geocerca de UN tracker,
- * acotadas a la ventana [desdeMs, hastaMs] (la jornada del chofer, de la fichada).
- * Máquina de estados sobre las geocercas:
- *   dentro de OFFAL = planta · dentro de un destino = geozona · fuera de todo = viaje.
- * planta + geozona + viaje = duración de la ventana.
- * @returns { minPlanta, minGeozona, minViaje, destinos:[...] } | null (sin datos)
+ * Segmenta la actividad de UN tracker (por sus geocercas) dentro de la ventana
+ * [desdeMs, hastaMs] (la jornada del chofer). Estados: dentro de OFFAL = planta,
+ * dentro de un destino = geozona, fuera de todo = viaje (ruta). Agrupa en VIAJES:
+ * cada viaje = salir de la planta hasta volver (con su tiempo de ruta y de destino).
+ * @returns { plantaMin, trips:[{ viajeMin, geozonaMin, destinos:[], iniFecha, iniHora, finHora }] } | null
  */
-export function metricasDeEventos(events, desdeMs, hastaMs) {
+export function viajesDeEventos(events, desdeMs, hastaMs) {
   if (!(hastaMs > desdeMs)) return null;
   const evs = (events || [])
     .map((e) => ({ ms: epoch(e.time || e.date), dir: e.event || e.type, offal: esOffal(e), zona: zoneLabelDe(e) }))
     .filter((e) => !Number.isNaN(e.ms) && (e.dir === 'inzone' || e.dir === 'outzone'))
     .sort((a, b) => a.ms - b.ms);
 
-  const estadoDe = (e) => (e.dir === 'inzone' ? (e.offal ? 'planta' : 'geozona') : 'viaje');
-
-  // Estado al inicio de la ventana: según el último evento ANTERIOR a `desde`.
-  let estado = null;
-  for (const e of evs) { if (e.ms < desdeMs) estado = estadoDe(e); else break; }
+  // Estado (y zona destino) al inicio de la ventana, según el último evento anterior.
+  let estado = null; // 'planta' | 'geozona' | 'viaje'
+  let zona = null;
+  const aplicar = (e) => {
+    if (e.dir === 'inzone') { estado = e.offal ? 'planta' : 'geozona'; zona = e.offal ? null : e.zona; }
+    else { estado = 'viaje'; zona = null; }
+  };
+  for (const e of evs) { if (e.ms < desdeMs) aplicar(e); else break; }
   const enVentana = evs.filter((e) => e.ms > desdeMs && e.ms < hastaMs);
   if (estado === null) {
     if (enVentana.length === 0) return null; // sin datos de GPS en la ventana
-    estado = 'planta'; // sin contexto previo: el chofer arranca la jornada en la planta
+    estado = 'planta'; zona = null; // sin contexto: arranca en planta
   }
 
-  const acc = { planta: 0, geozona: 0, viaje: 0 };
-  const destinos = new Set();
+  // Segmentos con estado, acotados a la ventana.
+  const segs = [];
   let cursor = desdeMs;
   for (const e of enVentana) {
-    acc[estado] += e.ms - cursor;
-    if (e.dir === 'inzone' && !e.offal && e.zona) destinos.add(e.zona);
-    estado = estadoDe(e);
+    segs.push({ estado, zona, ini: cursor, fin: e.ms });
+    aplicar(e);
     cursor = e.ms;
   }
-  acc[estado] += hastaMs - cursor;
+  segs.push({ estado, zona, ini: cursor, fin: hastaMs });
+
+  // Planta = tiempo en OFFAL. Viajes = corridas fuera de la planta (salida→regreso).
+  let plantaMs = 0;
+  const trips = [];
+  let cur = null;
+  for (const s of segs) {
+    const dur = s.fin - s.ini;
+    if (s.estado === 'planta') { plantaMs += dur; if (cur) { trips.push(cur); cur = null; } continue; }
+    if (!cur) cur = { iniMs: s.ini, finMs: s.fin, viajeMs: 0, geozonaMs: 0, destinos: new Set() };
+    cur.finMs = s.fin;
+    if (s.estado === 'viaje') cur.viajeMs += dur;
+    else { cur.geozonaMs += dur; if (s.zona) cur.destinos.add(s.zona); }
+  }
+  if (cur) trips.push(cur);
 
   const toMin = (ms) => Math.round(ms / 60000);
   return {
-    minPlanta: toMin(acc.planta),
-    minGeozona: toMin(acc.geozona),
-    minViaje: toMin(acc.viaje),
-    destinos: [...destinos],
+    plantaMin: toMin(plantaMs),
+    trips: trips.map((t) => {
+      const ini = fmtMs(t.iniMs);
+      return {
+        viajeMin: toMin(t.viajeMs),
+        geozonaMin: toMin(t.geozonaMs),
+        destinos: [...t.destinos],
+        iniFecha: ini.fecha,
+        iniHora: ini.hora,
+        finHora: fmtMs(t.finMs).hora,
+      };
+    }),
   };
 }

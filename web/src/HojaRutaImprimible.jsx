@@ -27,9 +27,9 @@ export default function HojaRutaImprimible({ hoja, onClose }) {
             <div className="hr-mb-tit">Hoja de Ruta — Transporte</div>
           </div>
           <div className="hr-mb-cell hr-mb-right">
+            <div className="hr-mb-id">Hoja N.º <b>HR-{String(h.id ?? 0).padStart(6, '0')}</b></div>
             <div><span className="hr-k">Fecha HR:</span> <b>{dash(h.fecha)}</b></div>
             <div><span className="hr-k">N.º Remito:</span> {dash(h.numeroRemito)}</div>
-            <div><span className="hr-k">Página:</span> 1 de 1</div>
           </div>
         </div>
 

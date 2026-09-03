@@ -181,6 +181,7 @@ export default function HojaRuta() {
           <table className="grilla">
             <thead>
               <tr>
+                <th>ID</th>
                 <th>Fecha</th>
                 <th>Remito</th>
                 <th>Chofer</th>
@@ -196,10 +197,11 @@ export default function HojaRuta() {
             </thead>
             <tbody>
               {hojas.length === 0 && (
-                <tr><td colSpan={11} className="vacio">Sin hojas de ruta cargadas.</td></tr>
+                <tr><td colSpan={12} className="vacio">Sin hojas de ruta cargadas.</td></tr>
               )}
               {hojas.map((h) => (
                 <tr key={h.id}>
+                  <td className="mono">HR-{String(h.id).padStart(6, '0')}</td>
                   <td className="mono">{h.fecha}</td>
                   <td>{h.numeroRemito ?? '—'}</td>
                   <td>{h.choferNombre ?? h.choferDni}</td>
