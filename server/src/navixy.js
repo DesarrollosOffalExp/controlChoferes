@@ -90,60 +90,50 @@ function esOffal(ev) {
   return /offal/i.test(zoneLabelDe(ev));
 }
 
-/** 'YYYY-MM-DD HH:mm:ss' -> minutos desde la medianoche de esa fecha. */
-function minDelDia(s) {
-  const m = String(s || '').match(/(\d{2}):(\d{2}):(\d{2})/);
-  if (!m) return null;
-  return Number(m[1]) * 60 + Number(m[2]) + Number(m[3]) / 60;
-}
+const epoch = (ts) => Date.parse(`${String(ts || '').replace(' ', 'T')}Z`);
 
 /**
- * Minutos que el camión (patente) estuvo FUERA de la geocerca OFFAL EXP en la fecha
- * = tiempo en viaje. Basado en eventos inzone/outzone del día (máquina de estados).
- * Devuelve null si no se puede determinar (sin tracker o sin eventos).
- *
- * @param patente  patente del tractor (de la Hoja de Ruta)
- * @param fecha    'YYYY-MM-DD'
- * @param finMin   minuto del día donde cortar (hoy: hora actual; días pasados: 1440)
- * @param trackers lista de trackers ya cacheada (opcional)
+ * Las 3 métricas (en minutos) a partir de los eventos de geocerca de UN tracker,
+ * acotadas a la ventana [desdeMs, hastaMs] (la jornada del chofer, de la fichada).
+ * Máquina de estados sobre las geocercas:
+ *   dentro de OFFAL = planta · dentro de un destino = geozona · fuera de todo = viaje.
+ * planta + geozona + viaje = duración de la ventana.
+ * @returns { minPlanta, minGeozona, minViaje, destinos:[...] } | null (sin datos)
  */
-export async function viajePorPatente(patente, fecha, finMin = 1440, trackers) {
-  const tk = await trackerByPatente(patente, trackers);
-  if (!tk) return { minutosViaje: null, trackerId: null, destinos: [], motivo: 'patente sin tracker en LSGPS' };
+export function metricasDeEventos(events, desdeMs, hastaMs) {
+  if (!(hastaMs > desdeMs)) return null;
+  const evs = (events || [])
+    .map((e) => ({ ms: epoch(e.time || e.date), dir: e.event || e.type, offal: esOffal(e), zona: zoneLabelDe(e) }))
+    .filter((e) => !Number.isNaN(e.ms) && (e.dir === 'inzone' || e.dir === 'outzone'))
+    .sort((a, b) => a.ms - b.ms);
 
-  const raw = await zoneEvents([tk.id], `${fecha} 00:00:00`, `${fecha} 23:59:59`);
+  const estadoDe = (e) => (e.dir === 'inzone' ? (e.offal ? 'planta' : 'geozona') : 'viaje');
 
-  // Destinos: geozonas (que NO son OFFAL) donde el camión ENTRÓ ese día.
-  const destinos = [...new Set(
-    raw
-      .filter((e) => (e.type || e.event) === 'inzone' && !esOffal(e))
-      .map(zoneLabelDe)
-      .filter(Boolean)
-  )];
-
-  const evs = raw
-    .filter(esOffal)
-    .map((e) => ({ tipo: e.type || e.event, min: minDelDia(e.time || e.date) }))
-    .filter((e) => e.min != null && (e.tipo === 'inzone' || e.tipo === 'outzone'))
-    .sort((a, b) => a.min - b.min);
-
-  if (evs.length === 0) return { minutosViaje: null, trackerId: tk.id, destinos, motivo: 'sin eventos de geocerca ese día' };
-
-  // Estado inicial (00:00): si el primer evento es "inzone" (llegó a Offal),
-  // antes venía de viaje (afuera). Si es "outzone", empezó adentro.
-  let afuera = evs[0].tipo === 'inzone';
-  let cursor = 0;
-  let viaje = 0;
-  for (const e of evs) {
-    if (e.tipo === 'inzone') {
-      if (afuera) viaje += e.min - cursor; // cierra tramo de viaje
-      afuera = false;
-    } else {
-      afuera = true; // sale de Offal -> abre tramo de viaje
-    }
-    cursor = e.min;
+  // Estado al inicio de la ventana: según el último evento ANTERIOR a `desde`.
+  let estado = null;
+  for (const e of evs) { if (e.ms < desdeMs) estado = estadoDe(e); else break; }
+  const enVentana = evs.filter((e) => e.ms > desdeMs && e.ms < hastaMs);
+  if (estado === null) {
+    if (enVentana.length === 0) return null; // sin datos de GPS en la ventana
+    estado = 'planta'; // sin contexto previo: el chofer arranca la jornada en la planta
   }
-  if (afuera) viaje += Math.max(0, finMin - cursor); // quedó afuera al cierre del día
 
-  return { minutosViaje: Math.round(viaje), trackerId: tk.id, destinos, motivo: null };
+  const acc = { planta: 0, geozona: 0, viaje: 0 };
+  const destinos = new Set();
+  let cursor = desdeMs;
+  for (const e of enVentana) {
+    acc[estado] += e.ms - cursor;
+    if (e.dir === 'inzone' && !e.offal && e.zona) destinos.add(e.zona);
+    estado = estadoDe(e);
+    cursor = e.ms;
+  }
+  acc[estado] += hastaMs - cursor;
+
+  const toMin = (ms) => Math.round(ms / 60000);
+  return {
+    minPlanta: toMin(acc.planta),
+    minGeozona: toMin(acc.geozona),
+    minViaje: toMin(acc.viaje),
+    destinos: [...destinos],
+  };
 }

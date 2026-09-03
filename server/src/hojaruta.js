@@ -13,6 +13,11 @@ function txtOrNull(v, max) {
   const s = (v == null ? '' : String(v)).trim();
   return s ? s.slice(0, max) : null;
 }
+// Hora 'HH:MM' (24h) o null.
+function horaOrNull(v) {
+  const s = (v == null ? '' : String(v)).trim();
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(s) ? s : null;
+}
 
 /**
  * Inserta una hoja de ruta. Obligatorios: fecha, chofer (dni) y patente del tractor
@@ -43,15 +48,22 @@ export async function crearHoja(data, creadoPor) {
   r.input('aguaOx', sql.Int, intOrNull(data.aguaOxigenada));
   r.input('tamborHiel', sql.Int, intOrNull(data.tamborHiel));
   r.input('creadoPor', sql.VarChar(160), txtOrNull(creadoPor, 160));
+  // Horarios del viaje (HH:MM). El turno noche cruza medianoche → se resuelve al calcular duraciones.
+  r.input('hSalidaPlanta', sql.VarChar(5), horaOrNull(data.salidaPlanta));
+  r.input('hLlegadaDestino', sql.VarChar(5), horaOrNull(data.llegadaDestino));
+  r.input('hSalidaDestino', sql.VarChar(5), horaOrNull(data.salidaDestino));
+  r.input('hLlegadaPlanta', sql.VarChar(5), horaOrNull(data.llegadaPlanta));
 
   const q = `
     INSERT INTO ${TABLA}
       (Fecha, NumeroRemito, ChoferDni, ChoferNombre, PatenteTractor, Destino,
-       SemiLleva, Semi, Hielo, Tambor, Pallets, AguaOxigenada, TamborHiel, CreadoPor)
+       SemiLleva, Semi, Hielo, Tambor, Pallets, AguaOxigenada, TamborHiel, CreadoPor,
+       HorarioSalidaPlanta, HorarioLlegadaDestino, HorarioSalidaDestino, HorarioLlegadaPlanta)
     OUTPUT INSERTED.Id
     VALUES
       (@fecha, @remito, @choferDni, @choferNombre, @patente, @destino,
-       @semiLleva, @semi, @hielo, @tambor, @pallets, @aguaOx, @tamborHiel, @creadoPor);`;
+       @semiLleva, @semi, @hielo, @tambor, @pallets, @aguaOx, @tamborHiel, @creadoPor,
+       @hSalidaPlanta, @hLlegadaDestino, @hSalidaDestino, @hLlegadaPlanta);`;
   const res = await r.query(q);
   return { id: res.recordset[0].Id };
 }
@@ -70,6 +82,8 @@ export async function listarHojas({ desde, hasta } = {}) {
            SemiLleva AS semiLleva, Semi AS semi,
            Hielo AS hielo, Tambor AS tambor, Pallets AS pallets,
            AguaOxigenada AS aguaOxigenada, TamborHiel AS tamborHiel,
+           HorarioSalidaPlanta AS salidaPlanta, HorarioLlegadaDestino AS llegadaDestino,
+           HorarioSalidaDestino AS salidaDestino, HorarioLlegadaPlanta AS llegadaPlanta,
            CONVERT(varchar(19), CreadoEn, 120) AS creadoEn, CreadoPor AS creadoPor
     FROM ${TABLA}
     WHERE ${where}
