@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import 'dotenv/config';
 import { getInweb, sql } from './db.js';
 import { CHOFERES } from './choferes.js';
-import { employeeList, trackerList, zoneEvents, trackerByPatente, viajesDeEventos } from './navixy.js';
+import { employeeList, trackerList, zoneEvents, trackerByPatente, viajesDeEventos, nombreCoincide } from './navixy.js';
 import { crearHoja, listarHojas, hojasPorFecha, anularHoja } from './hojaruta.js';
 import { jornadaDia } from './fichada.js';
 import { listarPatentes, listarFrigorificos } from './lavados.js';
@@ -254,18 +254,23 @@ app.get('/api/presencia', async (req, res) => {
       // Asignar viajes del GPS a las hojas por orden; sobrantes = sin hoja (excluidos).
       let viajes = [];   // desglose por hoja autorizada
       let sinHoja = [];  // viajes del GPS sin hoja (advertencia)
-      let minPlanta = null, minViaje = null, minGeozona = null;
+      let minPlanta = null, minViaje = null, minGeozona = null, minDestino = null;
       if (gps) {
         minPlanta = gps.plantaMin;
         minViaje = 0;
         minGeozona = 0;
+        minDestino = 0;
         hs.forEach((h, i) => {
           const t = gps.trips[i];
           const vm = t ? t.viajeMin : 0;
           const gm = t ? t.geozonaMin : 0;
+          // Hs en destino = geozona del viaje SI el nombre GPS coincide con el destino de la hoja.
+          const coincide = t && h.destino && (t.destinos || []).some((z) => nombreCoincide(h.destino, z));
+          const dm = coincide ? gm : 0;
           minViaje += vm;
           minGeozona += gm;
-          viajes.push({ destino: h.destino, viajeMin: vm, geozonaMin: gm });
+          minDestino += dm;
+          viajes.push({ destino: h.destino, viajeMin: vm, geozonaMin: gm, destinoMin: dm, gpsZonas: t ? t.destinos : [] });
         });
         sinHoja = gps.trips.slice(hs.length).map((t) => ({
           destinos: t.destinos,
@@ -287,7 +292,8 @@ app.get('/api/presencia', async (req, res) => {
         jornadaMin,                  // salida − entrada (fichada)
         minEnPlanta: minPlanta,
         minViaje,
-        minGeozona,
+        minGeozona,   // tiempo en CUALQUIER geocerca de destino (GPS)
+        minDestino,   // tiempo en la geocerca que coincide con el destino de la hoja
         destino: destinos.length === 1 ? destinos[0] : null, // 1 hoja → su destino; varias → desglose
         viajes,   // [{destino, viajeMin, geozonaMin}] — sub-filas si hay varias hojas
         sinHoja,  // [{destinos, fecha, horaIni, horaFin}] — advertencia (!)

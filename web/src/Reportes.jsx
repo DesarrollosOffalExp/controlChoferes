@@ -59,12 +59,31 @@ export default function Reportes() {
         </div>
       </section>
 
-      <div className="aviso">
-        <b>Jornada total</b> = Facial Entrada → Facial Salida (fichada). <b>Hs en planta / viaje / geozona</b>
-        se calculan del GPS (Navixy) por la patente de la hoja, dentro de la jornada. Los viajes se asignan a
-        las hojas por orden de hora; un <b>viaje sin hoja</b> se <b>excluye</b> de las horas y se marca con
-        <span className="bang"> (!)</span>. Si el chofer tiene varias hojas, se desglosa cada viaje en un renglón.
-      </div>
+      <details className="explica">
+        <summary>ℹ️ ¿Cómo se calcula cada columna? (leer)</summary>
+        <div className="explica-body">
+          <p className="fuentes"><b>Fuentes:</b> <span>Fichada</span> (molinetes faciales, INWEB) ·
+            <span>GPS</span> (geocercas de Navixy, por patente) ·
+            <span>Hoja de Ruta</span> (vínculo chofer ↔ patente ↔ destino).</p>
+          <ul>
+            <li><b>Entrada / Salida</b> — primera <i>Facial Entrada</i> y última <i>Facial Salida</i> del molinete.
+              La jornada se imputa al día que <b>entra</b>; en turno noche la salida cae al día siguiente (<b>+1d</b>).</li>
+            <li><b>Jornada total</b> — Facial Salida − Facial Entrada (el turno completo, de la fichada).</li>
+            <li><b>Hs en planta</b> — tiempo del camión <b>dentro de la geocerca OFFAL</b> (GPS), dentro de la jornada.</li>
+            <li><b>Hs en viaje</b> — tiempo en <b>ruta</b> (fuera de toda geocerca), solo de los viajes con hoja.</li>
+            <li><b>Hs en geozona</b> — tiempo dentro de <b>cualquier</b> geocerca de destino (GPS), de los viajes con hoja.</li>
+            <li><b>Hs en destino</b> — de lo anterior, cuánto fue en la geocerca que <b>coincide por nombre</b> con el
+              destino de la hoja (ej. hoja «GANADERA SAN ROQUE S.A.» ↔ GPS «GANADERA SAN ROQUE»). Si el nombre no
+              coincide, va 0 aunque el GPS marque geozona (el camión fue a otra).</li>
+            <li><b>Destino</b> — el cargado en la hoja de ruta (no el nombre del GPS).</li>
+          </ul>
+          <p><b>Viajes ↔ hojas:</b> los viajes del GPS se asignan a las hojas <b>por orden de hora</b>
+            (viaje 1 → hoja 1…). Un viaje del GPS <b>sin hoja</b> se <b>excluye</b> de las horas y se marca con
+            <span className="bang"> (!)</span> (con fecha y horario). Por eso, con viajes excluidos,
+            planta + viaje + geozona <b>no</b> suma la Jornada total. Si un chofer tiene varias hojas, cada viaje
+            se desglosa en un renglón. Todo se cuenta <b>solo dentro del rango Entrada–Salida</b>.</p>
+        </div>
+      </details>
 
       <section className="card">
         {error && <p className="error">Error: {error}</p>}
@@ -82,13 +101,14 @@ export default function Reportes() {
                   <th className="num">Hs en planta</th>
                   <th className="num">Hs en viaje</th>
                   <th className="num">Hs en geozona</th>
+                  <th className="num">Hs en destino</th>
                   <th>Destino</th>
                   <th style={{ textAlign: 'center' }}>(!)</th>
                 </tr>
               </thead>
               <tbody>
                 {choferes.length === 0 && (
-                  <tr><td colSpan={11} className="vacio">{loading ? 'Cargando…' : 'Sin datos para esta fecha.'}</td></tr>
+                  <tr><td colSpan={12} className="vacio">{loading ? 'Cargando…' : 'Sin datos para esta fecha.'}</td></tr>
                 )}
                 {choferes.map((c) => {
                   const varias = (c.viajes?.length ?? 0) > 1;
@@ -104,6 +124,7 @@ export default function Reportes() {
                         <td className={'num' + (c.minEnPlanta == null ? ' pend' : '')}><b>{fmtHs(c.minEnPlanta)}</b></td>
                         <td className={'num' + (c.minViaje == null ? ' pend' : '')}>{fmtHs(c.minViaje)}</td>
                         <td className={'num' + (c.minGeozona == null ? ' pend' : '')}>{fmtHs(c.minGeozona)}</td>
+                        <td className={'num' + (c.minDestino == null ? ' pend' : '')}>{fmtHs(c.minDestino)}</td>
                         <td>{varias ? <span className="muted">{c.viajes.length} viajes ↓</span> : (c.destino ?? '—')}</td>
                         <td style={{ textAlign: 'center' }}>{c.sinHoja?.length ? <span className="bang">(!)</span> : ''}</td>
                       </tr>
@@ -116,13 +137,19 @@ export default function Reportes() {
                           <td className="num"></td>
                           <td className="num">{fmtHs(v.viajeMin)}</td>
                           <td className="num">{fmtHs(v.geozonaMin)}</td>
-                          <td>{v.destino ?? '—'}</td><td></td>
+                          <td className="num">{fmtHs(v.destinoMin)}</td>
+                          <td>
+                            {v.destino ?? '—'}
+                            {v.geozonaMin > 0 && v.destinoMin === 0 && v.gpsZonas?.length
+                              ? <span className="gpsnote"> · GPS: {v.gpsZonas.join(', ')}</span> : null}
+                          </td>
+                          <td></td>
                         </tr>
                       ))}
 
                       {c.sinHoja?.length > 0 && (
                         <tr className="warnrow">
-                          <td colSpan={11}>
+                          <td colSpan={12}>
                             ⚠ <b>Viaje(s) sin hoja de ruta — excluidos de las horas</b> (GPS):
                             {c.sinHoja.map((s, i) => (
                               <span className="zonachip" key={i}>

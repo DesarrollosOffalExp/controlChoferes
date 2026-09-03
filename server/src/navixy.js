@@ -90,6 +90,23 @@ function esOffal(ev) {
   return /offal/i.test(zoneLabelDe(ev));
 }
 
+// ---- Emparejar el destino de la HOJA con el nombre de la geocerca del GPS -------
+// Los nombres difieren (hoja: "GANADERA SAN ROQUE S.A." · GPS: "GANADERA SAN ROQUE").
+// Se comparan por palabras significativas en común (ignorando "FRIGORÍFICO", "S.A.", etc.).
+const STOP = new Set(['FRIGORIFICO', 'FRIGORIFICOS', 'FRIG', 'MAT', 'SA', 'SAIC', 'SAICIF', 'SACIF',
+  'SRL', 'SACI', 'DE', 'DEL', 'LA', 'LAS', 'LOS', 'EL', 'SAN', 'SANTA', 'EXP', 'CIA', 'COMPANIA']);
+function palabras(s) {
+  return String(s || '')
+    .toUpperCase().normalize('NFD')
+    .replace(/[^A-Z0-9 ]/g, ' ').split(/\s+/)
+    .filter((t) => t.length >= 3 && !STOP.has(t));
+}
+/** ¿El destino de la hoja coincide (por alguna palabra) con el nombre de la geocerca? */
+export function nombreCoincide(destinoHoja, zonaGps) {
+  const a = new Set(palabras(destinoHoja));
+  return palabras(zonaGps).some((t) => a.has(t));
+}
+
 const epoch = (ts) => Date.parse(`${String(ts || '').replace(' ', 'T')}Z`);
 // ms -> hora/fecha local (los ts vienen como hora local y se parsean con 'Z', así que
 // toISOString devuelve la misma hora de pared).
