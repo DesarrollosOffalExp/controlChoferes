@@ -155,6 +155,8 @@ body {
 .hr-mb-right { font-size: 10.5px; line-height: 1.55; }
 .hr-mb-right .hr-k { color: var(--muted); font-weight: 600; }
 .hr-mb-right b { font-variant-numeric: tabular-nums; }
+.hr-mb-id { font-size: 12.5px; font-weight: 800; color: var(--ink); margin-bottom: 3px; }
+.hr-mb-id b { color: var(--accent); }
 
 .hr-sec { margin-top: 15px; }
 .hr-band { background: var(--ink); color: #fff; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .09em; padding: 7px 12px; border-radius: 5px 5px 0 0; }
@@ -177,8 +179,8 @@ body {
 .hr-hlbl { font-size: 12.5px; font-weight: 600; color: var(--ink-soft); }
 .hr-hbox { flex: 0 0 96px; height: 22px; border-bottom: 1.4px solid var(--ink); }
 
-.hr-firmas { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 30px; }
-.hr-firma { text-align: center; }
+.hr-firmas { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; margin-top: 40px; }
+.hr-firma { text-align: center; padding-top: 56px; }  /* espacio en blanco para firmar arriba de la línea */
 .hr-firma .hr-line { border-top: 1.5px solid var(--ink); margin-bottom: 6px; }
 .hr-firma .hr-rol { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-soft); }
 
@@ -188,15 +190,19 @@ body {
   .hr-metrics, .hr-firmas { grid-template-columns: 1fr; }
 }
 
-/* Impresión: se muestra SOLO la hoja (se oculta el resto de la app) */
+/* Impresión: SOLO la hoja, anclada arriba para que entre en 1 página A4.
+   (el resto de la app queda oculto pero seguía "ocupando lugar" y empujaba la
+   hoja a una 2ª página → por eso la hoja va position:absolute en top:0). */
 @media print {
+  @page { size: A4; margin: 0; }
   body { background: #fff; }
   body * { visibility: hidden; }
-  .hr-print-overlay { position: static; background: none; padding: 0; overflow: visible; }
   .hr-print-toolbar { display: none; }
   .hr-sheet, .hr-sheet * { visibility: visible; }
-  .hr-sheet { box-shadow: none; border-radius: 0; max-width: none; margin: 0; padding: 12mm; }
-  @page { size: A4; margin: 0; }
+  .hr-sheet {
+    position: absolute; top: 0; left: 0; right: 0;
+    box-shadow: none; border-radius: 0; max-width: none; margin: 0; padding: 11mm 12mm;
+  }
 }
 
 /* Formulario Hoja de Ruta */
@@ -276,6 +282,25 @@ input[type='date'] {
   background: rgba(245, 166, 35, .18); color: var(--warn); vertical-align: middle;
 }
 .grilla tbody tr:hover { background: var(--panel-2); }
+
+/* Reporte: jornada total, advertencia (!), sub-filas de desglose, chips de geozona */
+.grilla .jt { color: var(--accent-2); font-weight: 700; }
+.bang {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 24px; height: 20px; padding: 0 5px; border-radius: 6px;
+  background: rgba(245, 166, 35, .16); color: var(--warn); font-weight: 800;
+}
+.grilla .subrow td { background: var(--panel-2); font-size: 12px; color: var(--muted); }
+.grilla .subrow td.ind { color: var(--text); padding-left: 22px; }
+.grilla .subrow td.ind::before { content: "↳ "; color: var(--accent-2); font-weight: 700; }
+.grilla .subrow td.num { color: var(--text); }
+.grilla .warnrow td { background: rgba(245, 166, 35, .08); color: #f3d08a; white-space: normal; font-size: 12.5px; }
+.grilla .warnrow b { color: var(--warn); }
+.zonachip {
+  display: inline-block; background: rgba(245, 166, 35, .16); color: #f3d08a;
+  border: 1px solid rgba(245, 166, 35, .35); border-radius: 6px; padding: 1px 8px; margin: 0 4px;
+  font-size: 12px; font-variant-numeric: tabular-nums;
+}
 .vacio { text-align: center; color: var(--muted); padding: 20px; }
 .error { color: #ffb4ad; }
 
