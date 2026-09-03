@@ -123,8 +123,101 @@ body {
 .tab:hover { color: var(--text); }
 .tab.activo { color: #fff; border-bottom-color: var(--accent); }
 
+/* ====== Hoja de Ruta imprimible (overlay + hoja A4, membrete oficial) ====== */
+.hr-print-overlay { position: fixed; inset: 0; z-index: 200; background: rgba(6,14,19,.6); overflow: auto; padding: 20px 12px 40px; }
+.hr-print-toolbar {
+  max-width: 820px; margin: 0 auto 14px; display: flex; align-items: center; justify-content: space-between;
+  color: #fff; font-weight: 600; font-size: 14px;
+}
+.hr-print-actions { display: flex; gap: 8px; }
+.hr-btn { border: 0; background: #16262f; color: #fff; font: inherit; font-weight: 600; font-size: 14px; padding: 9px 16px; border-radius: 8px; cursor: pointer; }
+.hr-btn:hover { filter: brightness(1.15); }
+.hr-btn.ghost { background: transparent; border: 1px solid rgba(255,255,255,.4); }
+
+.hr-sheet {
+  --ink:#16262f; --ink-soft:#4a5a63; --muted:#6b7a82; --line:#c9d3d9; --line-soft:#e2e8eb;
+  --accent:#b3872b; --tile:#f3f6f7; --tile-line:#dbe3e6;
+  max-width: 820px; margin: 0 auto; background: #fff; color: var(--ink);
+  border-radius: 6px; padding: 30px 34px 26px; box-shadow: 0 18px 44px rgba(0,0,0,.4);
+  font-family: 'Inter', system-ui, sans-serif;
+}
+.hr-membrete { display: grid; grid-template-columns: 34% 1fr 26%; border: 1.4px solid var(--ink); border-radius: 4px; overflow: hidden; }
+.hr-mb-cell { padding: 9px 12px; display: flex; flex-direction: column; justify-content: center; }
+.hr-mb-cell + .hr-mb-cell { border-left: 1.4px solid var(--ink); }
+.hr-mb-left { flex-direction: row; align-items: center; gap: 11px; }
+.hr-mb-logo { width: 46px; height: 46px; object-fit: contain; flex-shrink: 0; }
+.hr-mb-emp { display: flex; flex-direction: column; line-height: 1.22; }
+.hr-mb-emp b { font-size: 13px; font-weight: 800; letter-spacing: .02em; }
+.hr-mb-emp span { font-size: 10px; color: var(--muted); margin-top: 2px; }
+.hr-mb-center { text-align: center; align-items: center; }
+.hr-mb-sis { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-soft); }
+.hr-mb-tit { font-size: 16px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; margin-top: 4px; }
+.hr-mb-right { font-size: 10.5px; line-height: 1.55; }
+.hr-mb-right .hr-k { color: var(--muted); font-weight: 600; }
+.hr-mb-right b { font-variant-numeric: tabular-nums; }
+
+.hr-sec { margin-top: 15px; }
+.hr-band { background: var(--ink); color: #fff; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .09em; padding: 7px 12px; border-radius: 5px 5px 0 0; }
+.hr-grid { display: grid; border: 1px solid var(--line); border-top: 0; border-radius: 0 0 5px 5px; overflow: hidden; }
+.hr-grid.c2 { grid-template-columns: 1fr 1fr; }
+.hr-grid.c5 { grid-template-columns: repeat(5,1fr); }
+.hr-field { padding: 8px 14px; border-top: 1px solid var(--line-soft); border-left: 1px solid var(--line-soft); }
+.hr-grid.c2 .hr-field:nth-child(-n+2) { border-top: 0; }
+.hr-grid.c2 .hr-field:nth-child(odd) { border-left: 0; }
+.hr-grid.c5 .hr-field:nth-child(-n+5) { border-top: 0; }
+.hr-grid.c5 .hr-field:nth-child(5n+1) { border-left: 0; }
+.hr-k { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.hr-v { font-size: 14px; font-weight: 600; margin-top: 2px; }
+.hr-v.big { font-size: 15px; font-weight: 700; }
+
+.hr-horarios { border: 1px solid var(--line); border-top: 0; border-radius: 0 0 5px 5px; padding: 16px 14px 8px; }
+.hr-timeline { display: flex; align-items: flex-start; }
+.hr-stop { display: flex; flex-direction: column; align-items: center; text-align: center; width: 104px; flex: 0 0 auto; }
+.hr-dot { width: 13px; height: 13px; border-radius: 50%; background: var(--ink); box-shadow: 0 0 0 3px #fff, 0 0 0 4.5px var(--ink); }
+.hr-lbl { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); margin-top: 9px; line-height: 1.25; }
+.hr-time { font-size: 15px; font-weight: 800; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.hr-time .nd { font-size: 9px; font-weight: 700; color: var(--accent); vertical-align: super; margin-left: 2px; }
+.hr-leg { flex: 1; padding-top: 5px; display: flex; flex-direction: column; align-items: center; min-width: 40px; }
+.hr-bar { height: 3px; width: 100%; border-radius: 2px; }
+.hr-leg.viaje .hr-bar { background: var(--ink); }
+.hr-leg.zona .hr-bar { background: var(--accent); }
+.hr-leg-lbl { font-size: 9px; font-weight: 700; text-transform: uppercase; color: var(--muted); margin-top: 5px; }
+.hr-leg-dur { font-size: 11.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.hr-metrics { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; margin-top: 14px; }
+.hr-metric { background: var(--tile); border: 1px solid var(--tile-line); border-radius: 8px; padding: 11px 14px; text-align: center; }
+.hr-metric.zona { border-color: var(--accent); }
+.hr-m-lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.hr-m-val { font-size: 24px; font-weight: 800; margin-top: 3px; font-variant-numeric: tabular-nums; }
+.hr-metric.zona .hr-m-val { color: var(--accent); }
+.hr-m-src { font-size: 9px; color: var(--muted); margin-top: 3px; }
+
+.hr-firmas { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 30px; }
+.hr-firma { text-align: center; }
+.hr-firma .hr-line { border-top: 1.5px solid var(--ink); margin-bottom: 6px; }
+.hr-firma .hr-rol { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-soft); }
+
+@media (max-width: 640px) {
+  .hr-grid.c5 { grid-template-columns: repeat(2,1fr); }
+  .hr-timeline { flex-wrap: wrap; gap: 10px; justify-content: center; } .hr-leg { display: none; }
+  .hr-metrics, .hr-firmas { grid-template-columns: 1fr; }
+}
+
+/* Impresión: se muestra SOLO la hoja (se oculta el resto de la app) */
+@media print {
+  body { background: #fff; }
+  body * { visibility: hidden; }
+  .hr-print-overlay { position: static; background: none; padding: 0; overflow: visible; }
+  .hr-print-toolbar { display: none; }
+  .hr-sheet, .hr-sheet * { visibility: visible; }
+  .hr-sheet { box-shadow: none; border-radius: 0; max-width: none; margin: 0; padding: 12mm; }
+  @page { size: A4; margin: 0; }
+}
+
 /* Formulario Hoja de Ruta */
 .card-titulo { margin: 0 0 14px; font-size: 15px; font-weight: 700; }
+.sub-titulo { margin: 16px 0 8px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); grid-column: 1 / -1; }
+.btn-print { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 7px; padding: 5px 10px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.btn-print:hover { border-color: var(--accent-2); color: #fff; }
 .hr-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px 18px; align-items: end; }
 .hr-form input, .hr-form select {
   background: var(--panel-2); border: 1px solid var(--line); color: var(--text);

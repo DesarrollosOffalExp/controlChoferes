@@ -5,9 +5,10 @@ import { fileURLToPath } from 'node:url';
 import 'dotenv/config';
 import { getInweb, sql } from './db.js';
 import { CHOFERES } from './choferes.js';
-import { employeeList, trackerList, viajePorPatente } from './navixy.js';
+import { employeeList } from './navixy.js';
 import { crearHoja, listarHojas, hojasPorFecha, anularHoja } from './hojaruta.js';
-import { jornadaDia, ahoraArg } from './fichada.js';
+import { jornadaDia } from './fichada.js';
+import { tiemposHoja, difRollover } from './metricas.js';
 import { listarPatentes, listarFrigorificos } from './lavados.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -116,21 +117,18 @@ app.get('/api/navixy/cobertura', async (_req, res) => {
 });
 
 /**
- * Presencia + tiempo en planta de los choferes para una fecha.
+ * Presencia + tiempos de los choferes para una fecha.
  * GET /api/presencia?fecha=YYYY-MM-DD
  *
- * - Hs EN PLANTA: se reconstruye con los molinetes reales de Hikvision
- *   (Dispositivo 'Facial Entrada' / 'Facial Salida') tratando el cruce de medianoche.
- *   NO se usa MIN/MAX del día: los choferes salen de viaje y vuelven, así que la
- *   primera/última marca del día calendario invierte entrada/salida. Ver fichada.js.
- * - Entrada = primera Facial Entrada del día; Salida = última Facial Salida de la
- *   jornada (puede caer al día siguiente en el turno noche → salida.otroDia=true).
+ * - Entrada / Salida: jornada del chofer con los molinetes reales de Hikvision
+ *   (Dispositivo 'Facial Entrada'/'Facial Salida'), tratando el cruce de medianoche.
  *   La jornada se imputa al día que ENTRA. Ver fichada.js (jornadaDia).
- * - Hs EN VIAJE (GPS) + destino: Hoja de Ruta (patente del chofer) → LSGPS.
+ * - Hs en viaje / Hs en geozona: de los HORARIOS de la Hoja de Ruta (los 4 tiempos
+ *   que cargan Vigilancia/Chofer). Ver metricas.js (tiemposHoja).
+ * - Hs en planta: jornada (fichada) − tiempo fuera del viaje (de la hoja).
  *
- * NOTA: "Hs en planta / Hs fuera" quedan sacadas hasta validar Entrada/Salida.
- * El cruce con LSGPS es best-effort: si falta la hoja o la patente no está en LSGPS,
- * minutosViaje queda en null (la fichada se devuelve igual).
+ * Todo el cruce con la hoja va en try/catch: si falla o no hay hoja, se devuelve
+ * la fichada igual (métricas en null).
  */
 app.get('/api/presencia', async (req, res) => {
   const fecha = String(req.query.fecha || '');
@@ -141,8 +139,6 @@ app.get('/api/presencia', async (req, res) => {
     // Ventana: la fecha + el día SIGUIENTE (la salida del turno noche cae al otro día).
     const hasta = new Date(Date.parse(`${fecha}T00:00:00Z`) + 1 * 86400000)
       .toISOString().slice(0, 10);
-    const arg = ahoraArg();
-    const finMin = fecha === arg.fecha ? arg.min : 1440; // si es hoy, cortar en la hora actual (para el viaje GPS)
 
     const pool = await getInweb();
     const request = pool.request();
@@ -172,58 +168,46 @@ app.get('/api/presencia', async (req, res) => {
       (marcasPorDni[dni] ||= []).push({ ts: String(r.ts).trim(), dir: r.dir });
     }
 
-    // Hoja de Ruta del día: patente + destino asignados a cada chofer → LSGPS
-    // (tiempo en viaje + destino real). Todo en try/catch: si falla (tabla/LSGPS),
-    // la fichada se devuelve igual.
-    const patentesPorDni = {};    // dni -> Set(patentes)
-    const destinoHojaPorDni = {}; // dni -> Set(destinos de la hoja)
-    const viajePorDni = {};       // dni -> minutos en viaje (o null)
-    const destinoGpsPorDni = {};  // dni -> Set(geozonas destino según GPS)
+    // Hoja de Ruta del día: patente, destino y HORARIOS por chofer. De los horarios
+    // salen Hs en viaje / Hs en geozona (y el tiempo fuera para Hs en planta).
+    // Un chofer puede tener más de una hoja: se suman.
+    const hoja = {}; // dni -> { patentes:Set, destinos:Set, viaje, geozona, fuera }
     try {
       const hojas = await hojasPorFecha(fecha);
       for (const h of hojas) {
         const dni = String(h.choferDni || '').trim();
-        if (!dni || !h.patenteTractor) continue;
-        (patentesPorDni[dni] ||= new Set()).add(String(h.patenteTractor).trim());
-        if (h.destino) (destinoHojaPorDni[dni] ||= new Set()).add(String(h.destino).trim());
-      }
-      if (Object.keys(patentesPorDni).length) {
-        const trackers = await trackerList(); // cache una vez para todas las patentes
-        const cachePat = {}; // patente -> { minutosViaje, destinos }
-        for (const [dni, pats] of Object.entries(patentesPorDni)) {
-          let suma = 0;
-          let algunoResuelto = false;
-          const dest = new Set();
-          for (const pat of pats) {
-            if (cachePat[pat] === undefined) {
-              cachePat[pat] = await viajePorPatente(pat, fecha, finMin, trackers);
-            }
-            const v = cachePat[pat];
-            if (v.minutosViaje != null) { suma += v.minutosViaje; algunoResuelto = true; }
-            for (const d of v.destinos || []) dest.add(d);
-          }
-          viajePorDni[dni] = algunoResuelto ? suma : null;
-          if (dest.size) destinoGpsPorDni[dni] = dest;
-        }
+        if (!dni) continue;
+        const acc = (hoja[dni] ||= { patentes: new Set(), destinos: new Set(), viaje: null, geozona: null, fuera: null });
+        if (h.patenteTractor) acc.patentes.add(String(h.patenteTractor).trim());
+        if (h.destino) acc.destinos.add(String(h.destino).trim());
+        const t = tiemposHoja(h);
+        const sumar = (a, b) => (a == null && b == null ? null : (a || 0) + (b || 0));
+        acc.viaje = sumar(acc.viaje, t.minViaje);
+        acc.geozona = sumar(acc.geozona, t.minGeozona);
+        acc.fuera = sumar(acc.fuera, t.minFuera);
       }
     } catch (e) {
-      console.error('Enriquecimiento LSGPS/hoja de ruta falló (se devuelve solo fichada):', e.message);
+      console.error('Cruce con Hoja de Ruta falló (se devuelve solo fichada):', e.message);
     }
 
     // Siempre los 18 choferes.
     const choferes = CHOFERES.map((c) => {
       const j = jornadaDia(marcasPorDni[c.dni], fecha); // null si no arrancó jornada ese día
-      const patentes = patentesPorDni[c.dni] ? [...patentesPorDni[c.dni]] : [];
+      const h = hoja[c.dni];
+      // Hs en planta = jornada (fichada) − tiempo fuera (viaje de la hoja).
+      const jornadaMin = j?.salida ? difRollover(j.entrada.hora, j.salida.hora) : null;
+      const minEnPlanta = jornadaMin != null && h?.fuera != null ? Math.max(0, jornadaMin - h.fuera) : null;
       return {
         dni: c.dni,
         chofer: c.nombre,
         area: 'Chofer',
-        patente: patentes.join(', ') || null,
+        patente: h && h.patentes.size ? [...h.patentes].join(', ') : null,
+        destino: h && h.destinos.size ? [...h.destinos].join(', ') : null,
         entrada: j?.entrada ?? null, // { hora, dia }
-        salida: j?.salida ?? null,   // { hora, dia, otroDia } — otroDia=true si sale al día siguiente
-        minutosViaje: viajePorDni[c.dni] ?? null, // viaje según GPS (pendiente de setup LSGPS)
-        destinoHoja: destinoHojaPorDni[c.dni] ? [...destinoHojaPorDni[c.dni]].join(', ') : null,
-        destinoGps: destinoGpsPorDni[c.dni] ? [...destinoGpsPorDni[c.dni]].join(', ') : null,
+        salida: j?.salida ?? null,   // { hora, dia, otroDia }
+        minEnPlanta,
+        minViaje: h?.viaje ?? null,
+        minGeozona: h?.geozona ?? null,
       };
     }).sort((a, b) => a.chofer.localeCompare(b.chofer, 'es'));
 

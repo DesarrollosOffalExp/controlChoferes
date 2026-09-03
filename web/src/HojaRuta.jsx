@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { hoyISO } from './utils.js';
+import HojaRutaImprimible from './HojaRutaImprimible.jsx';
 
 const VACIO = {
   fecha: hoyISO(),
@@ -14,7 +15,19 @@ const VACIO = {
   pallets: '',
   aguaOxigenada: '',
   tamborHiel: '',
+  salidaPlanta: '',
+  llegadaDestino: '',
+  salidaDestino: '',
+  llegadaPlanta: '',
 };
+
+// Horarios del viaje (los 4 tiempos que alimentan las métricas).
+const HORARIOS = [
+  ['salidaPlanta', 'Salida de Planta (Vigilancia)'],
+  ['llegadaDestino', 'Llegada Destino (Chofer)'],
+  ['salidaDestino', 'Salida Destino (Chofer)'],
+  ['llegadaPlanta', 'Llegada a Planta (Vigilancia)'],
+];
 
 // Campos numéricos (cantidades).
 const NUMS = [
@@ -33,6 +46,7 @@ export default function HojaRuta() {
   const [guardando, setGuardando] = useState(false);
   const [msg, setMsg] = useState(null); // { tipo:'ok'|'error', texto }
   const [hojas, setHojas] = useState([]);
+  const [imprimir, setImprimir] = useState(null); // hoja a mostrar en vista de impresión
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
@@ -142,6 +156,14 @@ export default function HojaRuta() {
             </label>
           ))}
 
+          <div className="sub-titulo">Horarios del viaje</div>
+          {HORARIOS.map(([k, etiqueta]) => (
+            <label key={k}>
+              <span>{etiqueta}</span>
+              <input type="time" value={form[k]} onChange={set(k)} />
+            </label>
+          ))}
+
           {/* Opciones de los desplegables (reusadas de Lavado de Camiones).
               Son combobox: se elige de la lista o se tipea si no está.
               Se muestra SOLO la patente (sin repetir el tipo de unidad). */}
@@ -186,11 +208,12 @@ export default function HojaRuta() {
                 <th className="num">Pallets</th>
                 <th className="num">Agua Ox.</th>
                 <th className="num">T. Hiel</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
               {hojas.length === 0 && (
-                <tr><td colSpan={10} className="vacio">Sin hojas de ruta cargadas.</td></tr>
+                <tr><td colSpan={11} className="vacio">Sin hojas de ruta cargadas.</td></tr>
               )}
               {hojas.map((h) => (
                 <tr key={h.id}>
@@ -204,12 +227,15 @@ export default function HojaRuta() {
                   <td className="num">{h.pallets ?? '—'}</td>
                   <td className="num">{h.aguaOxigenada ?? '—'}</td>
                   <td className="num">{h.tamborHiel ?? '—'}</td>
+                  <td><button className="btn-print" onClick={() => setImprimir(h)}>🖨 Imprimir</button></td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       </section>
+
+      {imprimir && <HojaRutaImprimible hoja={imprimir} onClose={() => setImprimir(null)} />}
     </>
   );
 }

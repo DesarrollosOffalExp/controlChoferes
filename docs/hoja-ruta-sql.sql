@@ -26,6 +26,10 @@ CREATE TABLE transporte.HojasRuta (
     Pallets        INT           NULL,       -- 10. PALLETS
     AguaOxigenada  INT           NULL,       -- 11. AGUA OXIGENADA
     TamborHiel     INT           NULL,       -- 12. TAMBOR DE HIEL
+    HorarioSalidaPlanta   VARCHAR(5) NULL,   -- 'HH:MM' salida de Planta (Vigilancia)
+    HorarioLlegadaDestino VARCHAR(5) NULL,   -- 'HH:MM' llegada Destino (Chofer)
+    HorarioSalidaDestino  VARCHAR(5) NULL,   -- 'HH:MM' salida Destino (Chofer)
+    HorarioLlegadaPlanta  VARCHAR(5) NULL,   -- 'HH:MM' llegada a Planta (Vigilancia)
     CreadoEn       DATETIME2(0)  NOT NULL CONSTRAINT DF_HojasRuta_CreadoEn DEFAULT SYSDATETIME(),
     CreadoPor      VARCHAR(160)  NULL,       -- usuario Entra (Easy Auth) que la cargó
     Anulada        BIT           NOT NULL CONSTRAINT DF_HojasRuta_Anulada  DEFAULT 0

@@ -19,7 +19,6 @@ export default function Reportes() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [cob, setCob] = useState(null); // cobertura de choferes en LSGPS (Navixy)
 
   async function cargar(f) {
     setLoading(true);
@@ -38,10 +37,6 @@ export default function Reportes() {
 
   useEffect(() => {
     cargar(fecha);
-    fetch('/api/navixy/cobertura')
-      .then((r) => (r.ok ? r.json() : null))
-      .then(setCob)
-      .catch(() => setCob(null));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -76,19 +71,11 @@ export default function Reportes() {
       </section>
 
       <div className="aviso">
-        <b>Entrada / Salida</b> = jornada del chofer, con los molinetes reales
-        (<i>Facial Entrada</i>/<i>Facial Salida</i>). La jornada se imputa al día que <b>entra</b>;
-        en el turno noche entra a la tarde y la salida cae al día siguiente (marcada <b>+1d</b>).
-        Las horas <i>en planta</i> quedan pendientes hasta validar entrada/salida.
+        <b>Entrada / Salida</b> salen de la fichada (molinetes reales); la jornada se imputa al día que
+        <b> entra</b> (turno noche: sale al día siguiente, marcado <b>+1d</b>). <b>Hs en viaje</b> y
+        <b> Hs en geozona</b> se calculan con los <b>horarios</b> cargados en la Hoja de Ruta;
+        <b> Hs en planta</b> = jornada − viaje. Donde falta la hoja o los horarios, va "—".
       </div>
-
-      {cob && cob.conVehiculo < cob.total && (
-        <div className="aviso lsgps">
-          <b>⚠ Nota LSGPS:</b> {cob.conVehiculo} de {cob.total} choferes tienen vehículo asignado en
-          Navixy. El cruce usa la <b>patente de la hoja de ruta</b> (no hace falta el chofer en
-          Navixy), pero la patente sí debe existir como vehículo en LSGPS.
-        </div>
-      )}
 
       <section className="card">
         {error && <p className="error">Error: {error}</p>}
@@ -99,18 +86,19 @@ export default function Reportes() {
                 <tr>
                   <th>Chofer</th>
                   <th>DNI</th>
-                  <th>Patente (hoja)</th>
+                  <th>Patente</th>
                   <th className="num">Entrada</th>
                   <th className="num">Salida</th>
-                  <th className="num">Hs en viaje (GPS)</th>
-                  <th>Destino (hoja)</th>
-                  <th>Destino (GPS)</th>
+                  <th className="num">Hs en planta</th>
+                  <th className="num">Hs en viaje</th>
+                  <th className="num">Hs en geozona</th>
+                  <th>Destino</th>
                 </tr>
               </thead>
               <tbody>
                 {choferes.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="vacio">
+                    <td colSpan={9} className="vacio">
                       {loading ? 'Cargando…' : 'Sin datos para esta fecha.'}
                     </td>
                   </tr>
@@ -122,11 +110,10 @@ export default function Reportes() {
                     <td className="mono">{c.patente ?? '—'}</td>
                     <td className={'num' + (c.entrada ? '' : ' pend')}><Hora m={c.entrada} /></td>
                     <td className={'num' + (c.salida ? '' : ' pend')}><Hora m={c.salida} /></td>
-                    <td className={'num' + (c.minutosViaje == null ? ' pend' : '')}>
-                      {fmtHs(c.minutosViaje)}
-                    </td>
-                    <td>{c.destinoHoja ?? '—'}</td>
-                    <td className={c.destinoGps == null ? 'pend' : ''}>{c.destinoGps ?? '—'}</td>
+                    <td className={'num' + (c.minEnPlanta == null ? ' pend' : '')}><b>{fmtHs(c.minEnPlanta)}</b></td>
+                    <td className={'num' + (c.minViaje == null ? ' pend' : '')}>{fmtHs(c.minViaje)}</td>
+                    <td className={'num' + (c.minGeozona == null ? ' pend' : '')}>{fmtHs(c.minGeozona)}</td>
+                    <td>{c.destino ?? '—'}</td>
                   </tr>
                 ))}
               </tbody>
