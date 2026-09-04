@@ -82,6 +82,9 @@ export default function Reportes() {
             <span className="bang"> (!)</span> (con fecha y horario). Por eso, con viajes excluidos,
             planta + viaje + geozona <b>no</b> suma la Jornada total. Si un chofer tiene varias hojas, cada viaje
             se desglosa en un renglón. Todo se cuenta <b>solo dentro del rango Entrada–Salida</b>.</p>
+          <p><b>«— / sin viaje en GPS»:</b> es el caso inverso — hay una <b>hoja declarada</b> pero el GPS
+            <b>no registró</b> un viaje que le corresponda dentro de la jornada (quedó fuera del horario, o esa
+            geocerca/patente no está en Navixy). Por eso ese renglón va en «—» y no en 0:00.</p>
         </div>
       </details>
 
@@ -132,7 +135,7 @@ export default function Reportes() {
                       {varias && c.viajes.map((v, i) => (
                         <tr className="subrow" key={c.dni + '-v' + i}>
                           <td className="ind">Viaje {i + 1}</td>
-                          <td></td><td className="mono">{c.patente ?? ''}</td>
+                          <td></td><td className="mono">{v.patente ?? '—'}</td>
                           <td className="num"></td><td className="num"></td><td className="num"></td>
                           <td className="num"></td>
                           <td className="num">{fmtHs(v.viajeMin)}</td>
@@ -140,8 +143,10 @@ export default function Reportes() {
                           <td className="num">{fmtHs(v.destinoMin)}</td>
                           <td>
                             {v.destino ?? '—'}
-                            {v.geozonaMin > 0 && v.destinoMin === 0 && v.gpsZonas?.length
-                              ? <span className="gpsnote"> · GPS: {v.gpsZonas.join(', ')}</span> : null}
+                            {v.sinGps
+                              ? <span className="gpsnote"> · sin viaje en GPS</span>
+                              : (v.geozonaMin > 0 && v.destinoMin === 0 && v.gpsZonas?.length
+                                  ? <span className="gpsnote"> · GPS: {v.gpsZonas.join(', ')}</span> : null)}
                           </td>
                           <td></td>
                         </tr>

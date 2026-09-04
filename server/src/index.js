@@ -262,15 +262,23 @@ app.get('/api/presencia', async (req, res) => {
         minDestino = 0;
         hs.forEach((h, i) => {
           const t = gps.trips[i];
-          const vm = t ? t.viajeMin : 0;
           const gm = t ? t.geozonaMin : 0;
           // Hs en destino = geozona del viaje SI el nombre GPS coincide con el destino de la hoja.
           const coincide = t && h.destino && (t.destinos || []).some((z) => nombreCoincide(h.destino, z));
-          const dm = coincide ? gm : 0;
-          minViaje += vm;
+          minViaje += t ? t.viajeMin : 0;
           minGeozona += gm;
-          minDestino += dm;
-          viajes.push({ destino: h.destino, viajeMin: vm, geozonaMin: gm, destinoMin: dm, gpsZonas: t ? t.destinos : [] });
+          minDestino += coincide ? gm : 0;
+          // En el desglose: si la hoja NO tiene un viaje del GPS que le corresponda,
+          // se muestra null ("—" / "sin viaje en GPS") en vez de 0, para no confundir.
+          viajes.push({
+            destino: h.destino,
+            patente: h.patente || null,
+            sinGps: !t,
+            viajeMin: t ? t.viajeMin : null,
+            geozonaMin: t ? t.geozonaMin : null,
+            destinoMin: t ? (coincide ? t.geozonaMin : 0) : null,
+            gpsZonas: t ? t.destinos : [],
+          });
         });
         sinHoja = gps.trips.slice(hs.length).map((t) => ({
           destinos: t.destinos,
