@@ -190,11 +190,11 @@ app.get('/api/presencia', async (req, res) => {
       console.error('Hoja de Ruta falló (se devuelve solo fichada):', e.message);
     }
 
-    // Cruce con NAVIXY (GPS) por patente, acotado a la jornada. Los viajes del GPS se
-    // asignan a las hojas POR ORDEN DE HORA (viaje 1 → hoja 1, …). Los viajes de más
-    // (sin hoja) se EXCLUYEN de las horas y se marcan como advertencia.
+    // Cruce con NAVIXY (GPS) por patente, acotado a la jornada. Por cada patente del
+    // chofer se suma el tiempo FUERA de OFFAL (viaje+geozona) y las visitas a destinos
+    // (con umbral de 5 min). Sumar por patente evita el doble conteo cuando maneja 2.
     const epochLocal = (ts) => Date.parse(`${ts.replace(' ', 'T')}Z`);
-    const gpsPorDni = {}; // dni -> { plantaMin, trips:[...] }
+    const gpsPorDni = {}; // dni -> { outMin, geozonaMin, visitas:[...] }
     try {
       const necesarias = new Set();
       for (const c of CHOFERES) {
@@ -221,19 +221,21 @@ app.get('/api/presencia', async (req, res) => {
             const desdeMs = epochLocal(`${j.entrada.dia} ${j.entrada.hora}:00`);
             const hastaMs = epochLocal(`${j.salida.dia} ${j.salida.hora}:00`);
             const pats = [...new Set(hs.map((h) => h.patente).filter(Boolean))];
-            let planta = null;
-            let trips = [];
+            let outMin = 0, geozonaMin = 0, hubo = false;
+            const visitas = [];
             for (const p of pats) {
               const tid = trkPorPat[p];
               if (!tid) continue;
               const r = viajesDeEventos(evPorTracker[tid] || [], desdeMs, hastaMs);
               if (!r) continue;
-              if (planta == null) planta = r.plantaMin; // planta de la patente principal
-              trips = trips.concat(r.trips);
+              hubo = true;
+              outMin += r.outMin;
+              geozonaMin += r.geozonaMin;
+              for (const v of r.visitas) visitas.push(v);
             }
-            if (planta != null) {
-              trips.sort((a, b) => `${a.iniFecha} ${a.iniHora}`.localeCompare(`${b.iniFecha} ${b.iniHora}`));
-              gpsPorDni[c.dni] = { plantaMin: planta, trips };
+            if (hubo) {
+              visitas.sort((a, b) => `${a.iniFecha} ${a.iniHora}`.localeCompare(`${b.iniFecha} ${b.iniHora}`));
+              gpsPorDni[c.dni] = { outMin, geozonaMin, visitas };
             }
           }
         }
@@ -251,40 +253,35 @@ app.get('/api/presencia', async (req, res) => {
         ? Math.round((epochLocal(`${j.salida.dia} ${j.salida.hora}:00`) - epochLocal(`${j.entrada.dia} ${j.entrada.hora}:00`)) / 60000)
         : null;
 
-      // Asignar viajes del GPS a las hojas por orden; sobrantes = sin hoja (excluidos).
+      // Planta = Jornada − tiempo fuera (viaje+geozona). Emparejar cada hoja con UNA
+      // visita a destino POR NOMBRE. Las visitas sin hoja quedan como advertencia (!).
       let viajes = [];   // desglose por hoja autorizada
-      let sinHoja = [];  // viajes del GPS sin hoja (advertencia)
+      let sinHoja = [];  // visitas del GPS sin hoja (advertencia)
       let minPlanta = null, minViaje = null, minGeozona = null, minDestino = null;
       if (gps) {
-        minPlanta = gps.plantaMin;
-        minViaje = 0;
-        minGeozona = 0;
+        minGeozona = gps.geozonaMin;
+        minViaje = Math.max(0, gps.outMin - gps.geozonaMin);
+        minPlanta = jornadaMin != null ? Math.max(0, jornadaMin - gps.outMin) : null;
+        const libres = gps.visitas.map((v) => ({ ...v, usada: false }));
         minDestino = 0;
-        hs.forEach((h, i) => {
-          const t = gps.trips[i];
-          const gm = t ? t.geozonaMin : 0;
-          // Hs en destino = geozona del viaje SI el nombre GPS coincide con el destino de la hoja.
-          const coincide = t && h.destino && (t.destinos || []).some((z) => nombreCoincide(h.destino, z));
-          minViaje += t ? t.viajeMin : 0;
-          minGeozona += gm;
-          minDestino += coincide ? gm : 0;
-          // En el desglose: si la hoja NO tiene un viaje del GPS que le corresponda,
-          // se muestra null ("—" / "sin viaje en GPS") en vez de 0, para no confundir.
-          viajes.push({
+        viajes = hs.map((h) => {
+          const v = libres.find((x) => !x.usada && h.destino && nombreCoincide(h.destino, x.zona));
+          if (v) { v.usada = true; minDestino += v.min; }
+          return {
             destino: h.destino,
             patente: h.patente || null,
-            sinGps: !t,
-            viajeMin: t ? t.viajeMin : null,
-            geozonaMin: t ? t.geozonaMin : null,
-            destinoMin: t ? (coincide ? t.geozonaMin : 0) : null,
-            gpsZonas: t ? t.destinos : [],
-          });
+            sinGps: !v,
+            geozonaMin: v ? v.min : null,
+            destinoMin: v ? v.min : null,
+            gpsZona: v ? v.zona : null,
+          };
         });
-        sinHoja = gps.trips.slice(hs.length).map((t) => ({
-          destinos: t.destinos,
-          fecha: t.iniFecha,
-          horaIni: t.iniHora,
-          horaFin: t.finHora,
+        // Visitas del GPS que ninguna hoja reclamó (siguen contando en los totales de geozona).
+        sinHoja = libres.filter((v) => !v.usada).map((v) => ({
+          destinos: [v.zona],
+          fecha: v.iniFecha,
+          horaIni: v.iniHora,
+          horaFin: v.finHora,
         }));
       }
 

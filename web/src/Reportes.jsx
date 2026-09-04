@@ -69,22 +69,25 @@ export default function Reportes() {
             <li><b>Entrada / Salida</b> — primera <i>Facial Entrada</i> y última <i>Facial Salida</i> del molinete.
               La jornada se imputa al día que <b>entra</b>; en turno noche la salida cae al día siguiente (<b>+1d</b>).</li>
             <li><b>Jornada total</b> — Facial Salida − Facial Entrada (el turno completo, de la fichada).</li>
-            <li><b>Hs en planta</b> — tiempo del camión <b>dentro de la geocerca OFFAL</b> (GPS), dentro de la jornada.</li>
-            <li><b>Hs en viaje</b> — tiempo en <b>ruta</b> (fuera de toda geocerca), solo de los viajes con hoja.</li>
-            <li><b>Hs en geozona</b> — tiempo dentro de <b>cualquier</b> geocerca de destino (GPS), de los viajes con hoja.</li>
+            <li><b>Hs en planta</b> — se calcula como <b>Jornada − Hs en viaje − Hs en geozona</b> (el tiempo que
+              queda dentro de OFFAL). Se deriva así (y no sumando el GPS de cada patente) para que un chofer que
+              maneja <b>2 patentes</b> el mismo día no cuente doble el camión parado en planta.</li>
+            <li><b>Hs en viaje</b> — tiempo en <b>ruta</b>, fuera de toda geocerca.</li>
+            <li><b>Hs en geozona</b> — tiempo dentro de <b>cualquier</b> geocerca de destino (GPS).</li>
             <li><b>Hs en destino</b> — de lo anterior, cuánto fue en la geocerca que <b>coincide por nombre</b> con el
               destino de la hoja (ej. hoja «GANADERA SAN ROQUE S.A.» ↔ GPS «GANADERA SAN ROQUE»). Si el nombre no
               coincide, va 0 aunque el GPS marque geozona (el camión fue a otra).</li>
             <li><b>Destino</b> — el cargado en la hoja de ruta (no el nombre del GPS).</li>
           </ul>
-          <p><b>Viajes ↔ hojas:</b> los viajes del GPS se asignan a las hojas <b>por orden de hora</b>
-            (viaje 1 → hoja 1…). Un viaje del GPS <b>sin hoja</b> se <b>excluye</b> de las horas y se marca con
-            <span className="bang"> (!)</span> (con fecha y horario). Por eso, con viajes excluidos,
-            planta + viaje + geozona <b>no</b> suma la Jornada total. Si un chofer tiene varias hojas, cada viaje
-            se desglosa en un renglón. Todo se cuenta <b>solo dentro del rango Entrada–Salida</b>.</p>
-          <p><b>«— / sin viaje en GPS»:</b> es el caso inverso — hay una <b>hoja declarada</b> pero el GPS
-            <b>no registró</b> un viaje que le corresponda dentro de la jornada (quedó fuera del horario, o esa
-            geocerca/patente no está en Navixy). Por eso ese renglón va en «—» y no en 0:00.</p>
+          <p><b>Visitas ↔ hojas:</b> cada hoja se empareja con la visita del GPS cuyo nombre de geocerca
+            <b>coincide con el destino</b> (ya <b>no</b> por orden de hora — así se corrigen los frigoríficos
+            «cruzados»). Se ignoran las entradas/salidas de geocerca de <b>menos de 5 minutos</b> (limpia el
+            «temblequeo» del GPS en el portón y las paradas de paso). Así <b>planta + viaje + geozona = Jornada</b>
+            (los números cierran). Todo se cuenta <b>solo dentro del rango Entrada–Salida</b>.</p>
+          <p><b>«— / sin visita en GPS»:</b> hay una <b>hoja declarada</b> pero el GPS <b>no registró</b> una visita
+            a ese destino dentro de la jornada (quedó fuera del horario, o esa geocerca/patente no está en Navixy).
+            Por eso ese renglón va en «—». Al revés, una visita del GPS <b>sin hoja</b> se marca con
+            <span className="bang"> (!)</span> (sigue sumando en geozona, pero avisa que falta cargar la hoja).</p>
         </div>
       </details>
 
@@ -134,19 +137,18 @@ export default function Reportes() {
 
                       {varias && c.viajes.map((v, i) => (
                         <tr className="subrow" key={c.dni + '-v' + i}>
-                          <td className="ind">Viaje {i + 1}</td>
+                          <td className="ind">Hoja {i + 1}</td>
                           <td></td><td className="mono">{v.patente ?? '—'}</td>
                           <td className="num"></td><td className="num"></td><td className="num"></td>
                           <td className="num"></td>
-                          <td className="num">{fmtHs(v.viajeMin)}</td>
+                          <td className="num"></td>
                           <td className="num">{fmtHs(v.geozonaMin)}</td>
                           <td className="num">{fmtHs(v.destinoMin)}</td>
                           <td>
                             {v.destino ?? '—'}
                             {v.sinGps
-                              ? <span className="gpsnote"> · sin viaje en GPS</span>
-                              : (v.geozonaMin > 0 && v.destinoMin === 0 && v.gpsZonas?.length
-                                  ? <span className="gpsnote"> · GPS: {v.gpsZonas.join(', ')}</span> : null)}
+                              ? <span className="gpsnote"> · sin visita en GPS</span>
+                              : (v.gpsZona ? <span className="gpsnote"> · GPS: {v.gpsZona}</span> : null)}
                           </td>
                           <td></td>
                         </tr>
@@ -155,7 +157,7 @@ export default function Reportes() {
                       {c.sinHoja?.length > 0 && (
                         <tr className="warnrow">
                           <td colSpan={12}>
-                            ⚠ <b>Viaje(s) sin hoja de ruta — excluidos de las horas</b> (GPS):
+                            ⚠ <b>Visita(s) del GPS sin hoja de ruta</b> (cuentan en geozona, pero falta la hoja):
                             {c.sinHoja.map((s, i) => (
                               <span className="zonachip" key={i}>
                                 {s.fecha?.slice(8, 10)}/{s.fecha?.slice(5, 7)} · {s.destinos?.join(', ') || 'geozona'} · {s.horaIni}–{s.horaFin}
